@@ -1,6 +1,7 @@
 import type React from "react";
 import type { Metadata } from "next";
 import "./globals.css";
+import { SelectedDateProvider } from "@/hooks/use-selected-date";
 import { ThemeProvider } from "@/components/theme-provider";
 import { Toaster } from "@/components/ui/toaster";
 export const metadata: Metadata = {
@@ -21,8 +22,10 @@ export default function RootLayout({
           disableTransitionOnChange
           data-oid="wrkhxae"
         >
-          {children}
-          <Toaster data-oid="1ml1s.d" />
+          <SelectedDateProvider>
+            {children}
+            <Toaster data-oid="1ml1s.d" />
+          </SelectedDateProvider>
         </ThemeProvider>
       </body>
     </html>

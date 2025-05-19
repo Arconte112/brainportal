@@ -1,43 +1,28 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { supabase } from "@/lib/supabaseClient";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogClose } from "@/components/ui/dialog";
 
-type Event = {
+// Evento para el calendario extraído de Supabase
+type CalendarEvent = {
   id: string;
   title: string;
-  date: Date;
-  time: string;
-  project?: string;
+  start_time: string;
+  end_time: string;
+  priority: string;
 };
+// Tareas para el día seleccionado
+type CalendarTask = { id: string; title: string; status: string; priority: string };
 
 export function Calendar() {
   const [currentDate, setCurrentDate] = useState(new Date());
-  const [events] = useState<Event[]>([
-    {
-      id: "1",
-      title: "Reunión de equipo",
-      date: new Date(2025, 4, 15),
-      time: "10:00",
-      project: "Proyecto A",
-    },
-    {
-      id: "2",
-      title: "Entrega de diseño",
-      date: new Date(2025, 4, 18),
-      time: "15:00",
-      project: "Proyecto B",
-    },
-    {
-      id: "3",
-      title: "Llamada con cliente",
-      date: new Date(2025, 4, 20),
-      time: "11:30",
-      project: "Proyecto A",
-    },
-  ]);
+  const [events, setEvents] = useState<CalendarEvent[]>([]);
+  const [selectedDate, setSelectedDate] = useState<Date | null>(null);
+  const [tasks, setTasks] = useState<CalendarTask[]>([]);
 
   const getDaysInMonth = (year: number, month: number) => {
     return new Date(year, month + 1, 0).getDate();
@@ -64,6 +49,38 @@ export function Calendar() {
   const daysInMonth = getDaysInMonth(year, month);
   const firstDayOfMonth = getFirstDayOfMonth(year, month);
   const today = new Date();
+  // Al hacer click en un día, cargar tareas y mostrar modal
+  const handleDayClick = async (day: number) => {
+    const date = new Date(year, month, day);
+    const dateStr = date.toISOString().substring(0, 10);
+    const { data: tasksData, error: tasksError } = await supabase
+      .from("tasks")
+      .select("id, title, status, priority")
+      .eq("due_date", dateStr)
+      .order("due_date", { ascending: true });
+    if (tasksError) console.error("Error loading tasks:", tasksError);
+    else setTasks(tasksData ?? []);
+    setSelectedDate(date);
+  };
+
+  // Cargar eventos desde Supabase para el mes actual
+  useEffect(() => {
+    const loadEventsForMonth = async () => {
+      const startOfMonth = new Date(year, month, 1);
+      startOfMonth.setHours(0, 0, 0, 0);
+      const endOfMonth = new Date(year, month + 1, 1);
+      endOfMonth.setHours(0, 0, 0, 0);
+      const { data, error } = await supabase
+        .from("events")
+        .select("id, title, start_time, end_time, priority")
+        .gte("start_time", startOfMonth.toISOString())
+        .lt("start_time", endOfMonth.toISOString())
+        .order("start_time", { ascending: true });
+      if (error) console.error("Error loading calendar events:", error);
+      else setEvents(data ?? []);
+    };
+    loadEventsForMonth();
+  }, [year, month]);
 
   // Adjust for Sunday as first day (0) to Monday as first day (1)
   const startDay = firstDayOfMonth === 0 ? 6 : firstDayOfMonth - 1;
@@ -78,10 +95,11 @@ export function Calendar() {
 
   const getEventsForDay = (day: number) => {
     return events.filter((event) => {
+      const d = new Date(event.start_time);
       return (
-        event.date.getFullYear() === year &&
-        event.date.getMonth() === month &&
-        event.date.getDate() === day
+        d.getFullYear() === year &&
+        d.getMonth() === month &&
+        d.getDate() === day
       );
     });
   };
@@ -95,7 +113,8 @@ export function Calendar() {
   };
 
   return (
-    <div className="space-y-6" data-oid="lppnehe">
+    <>
+      <div className="space-y-6" data-oid="lppnehe">
       <div className="flex items-center justify-between" data-oid="nb7djnn">
         <h1 className="text-2xl font-bold" data-oid="kfaxavi">
           Calendario
@@ -145,9 +164,10 @@ export function Calendar() {
             key={index}
             className={cn(
               "border border-border rounded-md min-h-24 p-1 relative",
-              day === null ? "bg-transparent" : "hover:bg-secondary/20",
+              day === null ? "bg-transparent" : "hover:bg-secondary/20 cursor-pointer",
             )}
             data-oid=".y6p074"
+            onClick={() => day !== null && handleDayClick(day)}
           >
             {day !== null && (
               <>
@@ -165,11 +185,11 @@ export function Calendar() {
                     <div
                       key={event.id}
                       className="text-xs p-1 border-l-2 border-white bg-secondary/30 rounded-sm truncate"
-                      title={`${event.title} - ${event.time}`}
+                      title={`${event.title} - ${new Date(event.start_time).toLocaleTimeString('es-ES', {hour: '2-digit', minute: '2-digit'})}`}
                       data-oid="_yqc50j"
                     >
                       <span className="font-medium" data-oid="d.2xihp">
-                        {event.time}
+                        {new Date(event.start_time).toLocaleTimeString('es-ES', {hour: '2-digit', minute: '2-digit'})}
                       </span>{" "}
                       {event.title}
                     </div>
@@ -181,5 +201,43 @@ export function Calendar() {
         ))}
       </div>
     </div>
+    <Dialog
+      open={!!selectedDate}
+      onOpenChange={(open) => { if (!open) setSelectedDate(null); }}
+    >
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>
+            Detalles de {selectedDate?.toLocaleDateString("es-ES", { weekday: "long", day: "numeric", month: "long", year: "numeric" })}
+          </DialogTitle>
+        </DialogHeader>
+        <div className="grid grid-cols-2 gap-4">
+          <div>
+            <h3 className="text-lg font-medium mb-2">Eventos</h3>
+            {selectedDate && getEventsForDay(selectedDate.getDate()).length > 0 ? (
+              getEventsForDay(selectedDate.getDate()).map((event) => (
+                <div key={event.id} className="text-sm mb-1">
+                  <strong>{new Date(event.start_time).toLocaleTimeString("es-ES", { hour: "2-digit", minute: "2-digit" })}</strong> - {event.title}
+                </div>
+              ))
+            ) : (
+              <p className="text-xs text-muted-foreground">No hay eventos</p>
+            )}
+          </div>
+          <div>
+            <h3 className="text-lg font-medium mb-2">Tareas</h3>
+            {tasks.length > 0 ? (
+              tasks.map((task) => <div key={task.id} className="text-sm mb-1">{task.title}</div>)
+            ) : (
+              <p className="text-xs text-muted-foreground">No hay tareas</p>
+            )}
+          </div>
+        </div>
+        <DialogFooter>
+          <DialogClose asChild><Button>Cerrar</Button></DialogClose>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  </>
   );
 }

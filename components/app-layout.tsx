@@ -1,20 +1,62 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
+import { supabase } from "@/lib/supabaseClient";
+import { useSelectedDate } from "@/hooks/use-selected-date";
 import { AppSidebar } from "./app-sidebar";
 import { TopBar } from "./top-bar";
 import { ChatBot } from "./chat-bot";
 import { SidebarProvider } from "@/components/ui/sidebar";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogFooter,
+  DialogTitle,
+  DialogClose,
+} from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import {
+  Select,
+  SelectTrigger,
+  SelectValue,
+  SelectContent,
+  SelectItem,
+} from "@/components/ui/select";
+import { Button } from "@/components/ui/button";
+
+
+// Tipo de evento para la lista de Eventos de hoy y Próximos eventos
+type EventItem = {
+  id: string;
+  title: string;
+  start_time: string;
+  end_time: string;
+  priority: string;
+};
+
+// Tipo para el evento seleccionado en el modal, incluye descripción
+type FullEventItem = EventItem & {
+  description?: string | null; // Description can be optional or null
+};
 
 export function AppLayout({ children }: { children: React.ReactNode }) {
   const [focusMode, setFocusMode] = useState(false);
   const [chatOpen, setChatOpen] = useState(false);
+  const [todayEvents, setTodayEvents] = useState<EventItem[]>([]);
+  const [upcomingEvents, setUpcomingEvents] = useState<EventItem[]>([]);
+  const [selectedEvent, setSelectedEvent] = useState<FullEventItem | null>(
+    null
+  );
 
-  // Handle keyboard shortcuts
-  React.useEffect(() => {
+  const { selectedDate } = useSelectedDate();
+
+  // Manejar atajos de teclado
+  useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      // Space to open chatbot
       if (
         e.key === " " &&
         !["INPUT", "TEXTAREA"].includes((e.target as HTMLElement).tagName)
@@ -22,28 +64,126 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
         e.preventDefault();
         setChatOpen(true);
       }
-
-      // C to open quick create
       if (
         e.key === "c" &&
         !["INPUT", "TEXTAREA"].includes((e.target as HTMLElement).tagName)
       ) {
-        // Handle quick create
         console.log("Quick create");
       }
     };
-
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
+  }, []);
+
+  // Cargar eventos para la fecha seleccionada
+  const loadTodayEvents = async () => {
+    if (!selectedDate) {
+      setTodayEvents([]); // Clear events if no date is selected
+      return;
+    }
+    // Calcular ventana UTC que cubre el día local seleccionado,
+    // ajustando por la zona horaria para incluir eventos almacenados en UTC
+    const [year, month, day] = selectedDate.split('-').map(Number);
+    const localStart = new Date(year, month - 1, day, 0, 0, 0, 0);
+    const offsetMs = localStart.getTimezoneOffset() * 60000;
+    const utcStart = new Date(localStart.getTime() - offsetMs).toISOString();
+    const utcEnd = new Date(localStart.getTime() + 24 * 60 * 60 * 1000 - offsetMs).toISOString();
+    const { data: todayData, error } = await supabase
+      .from("events")
+      .select("id, title, start_time, end_time, priority")
+      .gte("start_time", utcStart)
+      .lt("start_time", utcEnd)
+      .order("start_time", { ascending: true });
+    if (error) console.error("Error loading today events:", error);
+    else setTodayEvents(todayData ?? []);
+  };
+
+  useEffect(() => {
+    loadTodayEvents();
+  }, [selectedDate]);
+
+  // Cargar próximos eventos
+  const loadUpcomingEvents = async () => {
+    const now = new Date();
+    const { data: upcomingData, error } = await supabase
+      .from("events")
+      .select("id, title, start_time, end_time, priority")
+      .gt("start_time", now.toISOString())
+      .order("start_time", { ascending: true })
+      .limit(5);
+    if (error) console.error("Error loading upcoming events:", error);
+    else setUpcomingEvents(upcomingData ?? []);
+  };
+
+  useEffect(() => {
+    loadUpcomingEvents();
   }, []);
 
   // Función para convertir formato 24h a 12h
   const formatTo12Hour = (time24h: string) => {
     const [hours, minutes] = time24h.split(":").map(Number);
     const period = hours >= 12 ? "PM" : "AM";
-    const hours12 = hours % 12 || 12; // Convertir 0 a 12 para medianoche
+    const hours12 = hours % 12 || 12;
     return `${hours12}:${minutes.toString().padStart(2, "0")} ${period}`;
   };
+
+  const handleEventClick = async (eventId: string) => {
+    const { data, error } = await supabase
+      .from("events")
+      .select("id, title, description, start_time, end_time, priority")
+      .eq("id", eventId)
+      .single();
+
+    if (error) {
+      console.error("Error fetching event details:", error);
+      return;
+    }
+    if (data) {
+      setSelectedEvent(data as FullEventItem);
+    }
+  };
+
+  const handleSaveEvent = async () => {
+    if (!selectedEvent) return;
+
+    const eventToSave = {
+      title: selectedEvent.title,
+      description: selectedEvent.description,
+      start_time: selectedEvent.start_time,
+      end_time: selectedEvent.end_time,
+      priority: selectedEvent.priority,
+    };
+
+    const { error } = await supabase
+      .from("events")
+      .update(eventToSave)
+      .eq("id", selectedEvent.id);
+
+    if (error) {
+      console.error("Error updating event:", error);
+    } else {
+      setSelectedEvent(null);
+      await loadTodayEvents(); // Refresh today's events
+      await loadUpcomingEvents(); // Refresh upcoming events
+    }
+  };
+
+  // Helper function to format date for datetime-local input
+  // It ensures the date displayed is in the user's local timezone
+  const formatForDateTimeLocal = (isoString: string | undefined | null) => {
+    if (!isoString) return "";
+    try {
+      const date = new Date(isoString);
+      // Create a new date shifted by the timezone offset to display correctly in local time
+      const offset = date.getTimezoneOffset() * 60000; // offset in milliseconds
+      const localDate = new Date(date.getTime() - offset);
+      return localDate.toISOString().substring(0, 16);
+    } catch (e) {
+      console.error("Error formatting date for input:", e);
+      return ""; // Fallback to empty string if date is invalid
+    }
+  };
+
 
   return (
     <SidebarProvider defaultOpen={!focusMode} data-oid="oon9mc7">
@@ -95,68 +235,56 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
                     className="space-y-3 max-h-[400px] overflow-y-auto"
                     data-oid="2t318:r"
                   >
-                    {[
-                      {
-                        id: 1,
-                        title: "Reunión de equipo",
-                        startTime: "15:00",
-                        endTime: "16:30",
-                        priority: "high",
-                      },
-                      {
-                        id: 2,
-                        title: "Revisión de diseño",
-                        startTime: "17:30",
-                        endTime: "18:00",
-                        priority: "medium",
-                      },
-                      {
-                        id: 3,
-                        title: "Llamada con cliente",
-                        startTime: "10:00",
-                        endTime: "11:00",
-                        priority: "low",
-                      },
-                      {
-                        id: 4,
-                        title: "Planificación sprint",
-                        startTime: "12:30",
-                        endTime: "13:30",
-                        priority: "high",
-                      },
-                    ].map((event) => (
-                      <div
-                        key={event.id}
-                        className="flex items-center gap-2 p-2 hover:bg-secondary/20 rounded-md cursor-pointer"
-                        data-oid="ti3ln6v"
-                      >
-                        <div
-                          className={`w-2 h-2 rounded-full ${
-                            event.priority === "high"
-                              ? "bg-destructive"
-                              : event.priority === "medium"
-                                ? "bg-white"
-                                : "bg-muted-foreground"
-                          }`}
-                          data-oid="x27kulr"
-                        />
-
-                        <div className="flex-1" data-oid="qt5g3w6">
-                          <p className="text-sm font-medium" data-oid="_fqm-km">
-                            {event.title}
-                          </p>
-                          <p
-                            className="text-xs text-muted-foreground"
-                            data-oid="7esbbz:"
+                    {todayEvents.length > 0 ? (
+                      todayEvents.map((event) => {
+                        const start = new Date(event.start_time);
+                        const end = new Date(event.end_time);
+                        const startStr = `${start
+                          .getHours()
+                          .toString()
+                          .padStart(2, "0")}:${start
+                          .getMinutes()
+                          .toString()
+                          .padStart(2, "0")}`;
+                        const endStr = `${end
+                          .getHours()
+                          .toString()
+                          .padStart(2, "0")}:${end
+                          .getMinutes()
+                          .toString()
+                          .padStart(2, "0")}`;
+                        return (
+                          <div
+                            key={event.id}
+                            className="flex items-center gap-2 p-2 hover:bg-secondary/20 rounded-md cursor-pointer"
+                            data-oid="ti3ln6v"
+                            onClick={() => handleEventClick(event.id)}
                           >
-                            {formatTo12Hour(event.startTime)} -{" "}
-                            {formatTo12Hour(event.endTime)}
-                          </p>
-                        </div>
-                      </div>
-                    ))}
-                    {/* Si no hay eventos hoy */}
-                    {false && (
+                            <div
+                              className={`w-2 h-2 rounded-full ${
+                                event.priority === "high"
+                                  ? "bg-destructive"
+                                  : event.priority === "medium"
+                                  ? "bg-white" // Consider a more visible color like bg-yellow-400
+                                  : "bg-muted-foreground"
+                              }`}
+                              data-oid="x27kulr"
+                            />
+                            <div className="flex-1" data-oid="qt5g3w6">
+                              <p className="text-sm font-medium" data-oid="_fqm-km">
+                                {event.title}
+                              </p>
+                              <p
+                                className="text-xs text-muted-foreground"
+                                data-oid="7esbbz:"
+                              >
+                                {formatTo12Hour(startStr)} - {formatTo12Hour(endStr)}
+                              </p>
+                            </div>
+                          </div>
+                        );
+                      })
+                    ) : (
                       <div className="text-center py-4" data-oid="2.mnfie">
                         <p
                           className="text-sm text-muted-foreground"
@@ -172,97 +300,190 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
                     className="space-y-3 max-h-[400px] overflow-y-auto"
                     data-oid="l:zq_cw"
                   >
-                    {[
-                      {
-                        id: 3,
-                        title: "Entrega de diseño",
-                        date: "Mañana",
-                        startTime: "10:00",
-                        endTime: "11:00",
-                        priority: "medium",
-                      },
-                      {
-                        id: 4,
-                        title: "Llamada con cliente",
-                        date: "20 Mayo",
-                        startTime: "11:30",
-                        endTime: "12:30",
-                        priority: "low",
-                      },
-                      {
-                        id: 5,
-                        title: "Revisión de sprint",
-                        date: "22 Mayo",
-                        startTime: "09:00",
-                        endTime: "10:30",
-                        priority: "high",
-                      },
-                      {
-                        id: 6,
-                        title: "Presentación de proyecto",
-                        date: "25 Mayo",
-                        startTime: "14:00",
-                        endTime: "15:30",
-                        priority: "high",
-                      },
-                      {
-                        id: 7,
-                        title: "Reunión de equipo",
-                        date: "27 Mayo",
-                        startTime: "10:00",
-                        endTime: "11:00",
-                        priority: "medium",
-                      },
-                      {
-                        id: 8,
-                        title: "Taller de UX",
-                        date: "1 Junio",
-                        startTime: "09:30",
-                        endTime: "13:00",
-                        priority: "medium",
-                      },
-                    ].map((event) => (
-                      <div
-                        key={event.id}
-                        className="flex items-center gap-2 p-2 hover:bg-secondary/20 rounded-md cursor-pointer"
-                        data-oid="y-.wn__"
-                      >
-                        <div
-                          className={`w-2 h-2 rounded-full ${
-                            event.priority === "high"
-                              ? "bg-destructive"
-                              : event.priority === "medium"
-                                ? "bg-white"
-                                : "bg-muted-foreground"
-                          }`}
-                          data-oid="j3n1gyf"
-                        />
-
-                        <div className="flex-1" data-oid="-x.jb8l">
-                          <p className="text-sm font-medium" data-oid="vj03qzs">
-                            {event.title}
-                          </p>
-                          <p
-                            className="text-xs text-muted-foreground"
-                            data-oid="aa3tewu"
+                    {upcomingEvents.length > 0 ? (
+                      upcomingEvents.map((event) => {
+                        const start = new Date(event.start_time);
+                        const end = new Date(event.end_time);
+                        const dateLabel = start.toLocaleDateString("es-ES", {
+                          day: "numeric",
+                          month: "short",
+                        });
+                        const startStr = `${start
+                          .getHours()
+                          .toString()
+                          .padStart(2, "0")}:${start
+                          .getMinutes()
+                          .toString()
+                          .padStart(2, "0")}`;
+                        const endStr = `${end
+                          .getHours()
+                          .toString()
+                          .padStart(2, "0")}:${end
+                          .getMinutes()
+                          .toString()
+                          .padStart(2, "0")}`;
+                        return (
+                          <div
+                            key={event.id}
+                            className="flex items-center gap-2 p-2 hover:bg-secondary/20 rounded-md cursor-pointer"
+                            data-oid="y-.wn__"
+                            onClick={() => handleEventClick(event.id)}
                           >
-                            {event.date}, {formatTo12Hour(event.startTime)} -{" "}
-                            {formatTo12Hour(event.endTime)}
-                          </p>
-                        </div>
+                            <div
+                              className={`w-2 h-2 rounded-full ${
+                                event.priority === "high"
+                                  ? "bg-destructive"
+                                  : event.priority === "medium"
+                                  ? "bg-white" // Consider a more visible color
+                                  : "bg-muted-foreground"
+                              }`}
+                              data-oid="j3n1gyf"
+                            />
+                            <div className="flex-1" data-oid="-x.jb8l">
+                              <p className="text-sm font-medium" data-oid="vj03qzs">
+                                {event.title}
+                              </p>
+                              <p
+                                className="text-xs text-muted-foreground"
+                                data-oid="aa3tewu"
+                              >
+                                {dateLabel}, {formatTo12Hour(startStr)} - {formatTo12Hour(endStr)}
+                              </p>
+                            </div>
+                          </div>
+                        );
+                      })
+                    ) : (
+                      <div className="text-center py-4" data-oid="2.mnfie">
+                        <p
+                          className="text-sm text-muted-foreground"
+                          data-oid="atpplyv"
+                        >
+                          No hay próximos eventos
+                        </p>
                       </div>
-                    ))}
+                    )}
                   </TabsContent>
                 </Tabs>
               </div>
             </div>
           </main>
+          <Dialog
+            open={!!selectedEvent}
+            onOpenChange={(open) => {
+              if (!open) setSelectedEvent(null);
+            }}
+          >
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>Detalles del evento</DialogTitle>
+              </DialogHeader>
+              <form
+                onSubmit={async (e) => {
+                  e.preventDefault();
+                  await handleSaveEvent();
+                }}
+              >
+                <div className="grid gap-2">
+                  <Label htmlFor="title">Título</Label>
+                  <Input
+                    id="title"
+                    value={selectedEvent?.title || ""}
+                    onChange={(e) =>
+                      setSelectedEvent((prev) =>
+                        prev ? { ...prev, title: e.target.value } : prev
+                      )
+                    }
+                  />
+                </div>
+                <div className="grid gap-2 mt-4">
+                  <Label htmlFor="description">Descripción</Label>
+                  <Textarea
+                    id="description"
+                    value={selectedEvent?.description || ""}
+                    onChange={(e) =>
+                      setSelectedEvent((prev) =>
+                        prev
+                          ? { ...prev, description: e.target.value }
+                          : prev
+                      )
+                    }
+                  />
+                </div>
+                <div className="grid gap-2 mt-4">
+                  <Label htmlFor="start_time">Inicio</Label>
+                  <Input
+                    type="datetime-local"
+                    id="start_time"
+                    value={formatForDateTimeLocal(selectedEvent?.start_time)}
+                    onChange={(e) =>
+                      setSelectedEvent((prev) =>
+                        prev
+                          ? {
+                              ...prev,
+                              start_time: new Date(
+                                e.target.value
+                              ).toISOString(),
+                            }
+                          : prev
+                      )
+                    }
+                  />
+                </div>
+                <div className="grid gap-2 mt-4">
+                  <Label htmlFor="end_time">Fin</Label>
+                  <Input
+                    type="datetime-local"
+                    id="end_time"
+                    value={formatForDateTimeLocal(selectedEvent?.end_time)}
+                    onChange={(e) =>
+                      setSelectedEvent((prev) =>
+                        prev
+                          ? {
+                              ...prev,
+                              end_time: new Date(
+                                e.target.value
+                              ).toISOString(),
+                            }
+                          : prev
+                      )
+                    }
+                  />
+                </div>
+                <div className="grid gap-2 mt-4">
+                  <Label htmlFor="priority">Prioridad</Label>
+                  <Select
+                    value={selectedEvent?.priority || ""}
+                    onValueChange={(value) =>
+                      setSelectedEvent((prev) =>
+                        prev ? { ...prev, priority: value } : prev
+                      )
+                    }
+                  >
+                    <SelectTrigger id="priority">
+                      <SelectValue placeholder="Selecciona prioridad" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="low">Baja</SelectItem>
+                      <SelectItem value="medium">Media</SelectItem>
+                      <SelectItem value="high">Alta</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <DialogFooter>
+                  <DialogClose asChild>
+                    <Button variant="outline" type="button">Cancelar</Button>
+                  </DialogClose>
+                  <Button type="submit">Guardar</Button>
+                </DialogFooter>
+              </form>
+            </DialogContent>
+          </Dialog>
           <ChatBot
             isOpen={chatOpen}
             onClose={() => setChatOpen(false)}
             data-oid="l_-u2a."
           />
-
           {!chatOpen && (
             <button
               onClick={() => setChatOpen(true)}
@@ -299,12 +520,10 @@ function BrainIcon(props: React.SVGProps<SVGSVGElement>) {
         d="M9.5 2A2.5 2.5 0 0 1 12 4.5v15a2.5 2.5 0 0 1-2.5 2.5h-7A2.5 2.5 0 0 1 0 19.5v-15A2.5 2.5 0 0 1 2.5 2h7z"
         data-oid="5_2ex1l"
       />
-
       <path
         d="M14.5 2A2.5 2.5 0 0 0 12 4.5v15a2.5 2.5 0 0 0 2.5 2.5h7a2.5 2.5 0 0 0 2.5-2.5v-15A2.5 2.5 0 0 0 21.5 2h-7z"
         data-oid="21t7d19"
       />
-
       <path d="M6 12h4" data-oid="qq-vroz" />
       <path d="M14 12h4" data-oid="qbk.-c1" />
       <path d="M6 8h4" data-oid="9th7emh" />

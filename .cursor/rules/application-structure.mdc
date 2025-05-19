@@ -1,0 +1,56 @@
+---
+description: 
+globs: 
+alwaysApply: true
+---
+# BrainPortal - Estructura de la Aplicación
+
+Esta regla detalla la estructura de directorios y los componentes principales de la aplicación BrainPortal.
+
+## Estructura de Directorios Principal (`app/`):
+
+El directorio `app/` sigue las convenciones del App Router de Next.js.
+
+*   `[app/layout.tsx](mdc:app/layout.tsx)`: El layout raíz de la aplicación. Define el HTML base, provee el tema (ThemeProvider) y el sistema de notificaciones (Toaster).
+*   `[app/page.tsx](mdc:app/page.tsx)`: La página de inicio de la aplicación. Renderiza el `[AppLayout](mdc:components/app-layout.tsx)` y el `[Dashboard](mdc:components/dashboard.tsx)`.
+*   `[app/globals.css](mdc:app/globals.css)`: Estilos CSS globales.
+*   **Secciones Principales (Rutas):**
+    *   `app/calendar/`: Contiene la lógica y UI para la funcionalidad de calendario/agenda.
+        *   Componente principal probable: `[weekly-calendar.tsx](mdc:components/weekly-calendar.tsx)` o `[calendar.tsx](mdc:components/calendar.tsx)`.
+    *   `app/projects/`: Gestión de proyectos.
+        *   `app/projects/[id]/`: Páginas de detalle para proyectos individuales.
+        *   `app/projects/tasks/`: Posiblemente para la gestión de tareas dentro de los proyectos o una vista global de tareas.
+        *   Componentes relacionados: `[projects.tsx](mdc:components/projects.tsx)`, `[project-detail.tsx](mdc:components/project-detail.tsx)`, `[project-tasks-list.tsx](mdc:components/project-tasks-list.tsx)`.
+    *   `app/archive/`: Sección para elementos archivados.
+        *   Componente principal: `[archive.tsx](mdc:components/archive.tsx)`.
+    *   `app/settings/`: Configuración de la aplicación y/o del usuario.
+        *   Componente principal: `[settings.tsx](mdc:components/settings.tsx)`.
+
+## Directorio de Componentes (`components/`):
+
+Contiene los componentes reutilizables de la aplicación.
+
+*   `[components/app-layout.tsx](mdc:components/app-layout.tsx)`: Componente crucial que organiza la interfaz principal. Incluye:
+    *   `[AppSidebar](mdc:components/app-sidebar.tsx)`: Barra lateral de navegación.
+    *   `[TopBar](mdc:components/top-bar.tsx)`: Barra superior, posiblemente con controles globales o información.
+    *   `[ChatBot](mdc:components/chat-bot.tsx)`: Componente del chatbot.
+    *   Lógica para el "Modo Foco" y atajos de teclado (espacio para chatbot, 'c' para quick create).
+    *   Muestra una sección de eventos (hoy/próximos) en la disposición principal.
+*   `[components/dashboard.tsx](mdc:components/dashboard.tsx)`: El panel principal que se muestra en la ruta de inicio.
+*   `[components/theme-provider.tsx](mdc:components/theme-provider.tsx)`: Proveedor para la gestión de temas (claro/oscuro).
+*   **Componentes de UI (`components/ui/`):**
+    *   Este directorio probablemente contiene los componentes de bajo nivel de Shadcn/UI (botones, inputs, dialogs, etc.), que son la base para los componentes más complejos de la aplicación. Se referencia en `[components.json](mdc:components.json)`.
+*   **Componentes Específicos de Funcionalidad:**
+    *   `[calendar.tsx](mdc:components/calendar.tsx)` y `[weekly-calendar.tsx](mdc:components/weekly-calendar.tsx)`: Relacionados con la visualización y gestión del calendario.
+    *   `[projects.tsx](mdc:components/projects.tsx)`, `[project-detail.tsx](mdc:components/project-detail.tsx)`, `[project-tasks-list.tsx](mdc:components/project-tasks-list.tsx)`: Para la sección de proyectos.
+    *   `[task-dialog.tsx](mdc:components/task-dialog.tsx)`, `[note-dialog.tsx](mdc:components/note-dialog.tsx)`, `[quick-create-dialog.tsx](mdc:components/quick-create-dialog.tsx)`: Modales para crear/editar tareas, notas, etc.
+    *   `[settings.tsx](mdc:components/settings.tsx)`: Interfaz para la configuración.
+    *   `[archive.tsx](mdc:components/archive.tsx)`: Interfaz para la sección de archivo.
+
+## Otros Directorios Relevantes:
+
+*   `hooks/`: Probablemente para Custom Hooks de React.
+*   `lib/`: Funciones de utilidad, helpers, o lógica de cliente (ej. `utils.ts`).
+*   `public/`: Archivos estáticos (imágenes, fuentes, etc.).
+*   `styles/`: Podría contener estilos adicionales o configuraciones de estilo si `app/globals.css` no es suficiente.
+

@@ -1,12 +1,20 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { cn } from "@/lib/utils";
 
-export function WeeklyCalendar() {
+interface WeeklyCalendarProps {
+  selectedDate: string;
+  onSelectDate: (date: string) => void;
+  // Lista de tareas cargadas en Dashboard
+  tasks: { id: string; title: string; dueDate?: string; status: string }[];
+}
+export function WeeklyCalendar({ selectedDate, onSelectDate, tasks }: WeeklyCalendarProps) {
   const [currentDate, setCurrentDate] = useState(new Date());
+  // Mapa de tareas por fecha (YYYY-MM-DD)
+  const [tasksByDate, setTasksByDate] = useState<Record<string, { id: string; title: string }[]>>({});
 
   // Generate week days starting from Monday of the current week
   const getWeekDays = () => {
@@ -25,6 +33,16 @@ export function WeeklyCalendar() {
   };
 
   const weekDays = getWeekDays();
+  // Construir mapa de tareas por fecha a partir de las tareas pasadas como prop
+  useEffect(() => {
+    const map: Record<string, { id: string; title: string }[]> = {};
+    tasks.forEach((t) => {
+      if (t.status !== "pending" || !t.dueDate) return;
+      if (!map[t.dueDate]) map[t.dueDate] = [];
+      map[t.dueDate].push({ id: t.id, title: t.title });
+    });
+    setTasksByDate(map);
+  }, [tasks]);
 
   const isToday = (date: Date) => {
     const today = new Date();
@@ -74,22 +92,39 @@ export function WeeklyCalendar() {
       </div>
 
       <div className="flex gap-1 overflow-x-auto pb-2">
-        {weekDays.map((date) => (
-          <div
-            key={date.toISOString()}
-            className={cn(
-              "flex-shrink-0 w-14 h-14 flex flex-col items-center justify-center rounded-md border border-border",
-              isToday(date)
-                ? "bg-accent text-white"
-                : "hover:bg-secondary/50 cursor-pointer",
-            )}
-          >
-            <span className="text-xs text-muted-foreground">
-              {date.toLocaleDateString("es-ES", { weekday: "short" })}
-            </span>
-            <span className="text-sm font-medium">{date.getDate()}</span>
-          </div>
-        ))}
+        {weekDays.map((date) => {
+          // Calcular clave de fecha en formato YYYY-MM-DD según zona local
+          const year = date.getFullYear();
+          const month = String(date.getMonth() + 1).padStart(2, '0');
+          const day = String(date.getDate()).padStart(2, '0');
+          const dateKey = `${year}-${month}-${day}`;
+          const tasksForDay = tasksByDate[dateKey] || [];
+          const isSelected = dateKey === selectedDate;
+          return (
+            <div
+              key={dateKey}
+              onClick={() => onSelectDate(dateKey)}
+              className={cn(
+                "flex-shrink-0 w-14 h-14 flex flex-col items-center justify-center rounded-md border border-border",
+                isToday(date)
+                  ? "bg-accent text-white"
+                  : isSelected
+                  ? "bg-accent/50 text-accent-foreground"
+                  : "hover:bg-secondary/50 cursor-pointer",
+              )}
+            >
+              <span className="text-xs text-muted-foreground">
+                {date.toLocaleDateString('es-ES', { weekday: 'short' })}
+              </span>
+              <span className="text-sm font-medium">{date.getDate()}</span>
+              {tasksForDay.length > 0 && (
+                <span className="mt-1 text-[10px] bg-accent text-accent-foreground px-1 rounded">
+                  {tasksForDay.length}
+                </span>
+              )}
+            </div>
+          );
+        })}
       </div>
     </div>
   );

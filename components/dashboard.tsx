@@ -2,12 +2,16 @@
 
 import type React from "react";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { useSelectedDate } from "@/hooks/use-selected-date";
+import { supabase } from "@/lib/supabaseClient";
 import { Progress } from "@/components/ui/progress";
 import { WeeklyCalendar } from "./weekly-calendar";
 import { Button } from "@/components/ui/button";
 import { Plus, Calendar, CalendarOff } from "lucide-react";
 import { TaskDialog } from "./task-dialog";
+import { PROJECTS } from "./project-detail";
+import { Badge } from "@/components/ui/badge";
 import { toast } from "@/components/ui/use-toast";
 import { ToastAction } from "@/components/ui/toast";
 
@@ -52,62 +56,55 @@ const SAMPLE_NOTES: Note[] = [
 ];
 
 export function Dashboard() {
-  const [tasks, setTasks] = useState<Task[]>([
-    {
-      id: "1",
-      title: "Revisar propuesta de diseño",
-      status: "pending",
-      priority: "high",
-      dueDate: "2025-05-15",
-      description:
-        "Revisar la última versión de la propuesta de diseño y enviar feedback al equipo.",
-      linkedNoteIds: ["dashboard-note-1"],
-    },
-    {
-      id: "2",
-      title: "Preparar presentación para cliente",
-      status: "pending",
-      priority: "medium",
-      dueDate: "2025-05-16",
-      description:
-        "Crear slides para la presentación del nuevo proyecto al cliente.",
-      linkedNoteIds: ["dashboard-note-1", "dashboard-note-2"],
-    },
-    {
-      id: "3",
-      title: "Actualizar documentación",
-      status: "pending",
-      priority: "low",
-      dueDate: "2025-05-18",
-      description:
-        "Actualizar la documentación técnica con los últimos cambios.",
-    },
-    {
-      id: "4",
-      title: "Enviar correo a equipo",
-      status: "done",
-      priority: "medium",
-      dueDate: "2025-05-14",
-      description: "Enviar correo con resumen de la reunión semanal.",
-    },
-    {
-      id: "5",
-      title: "Revisar métricas semanales",
-      status: "done",
-      priority: "low",
-      dueDate: "2025-05-13",
-      description:
-        "Analizar las métricas de rendimiento de la semana anterior.",
-    },
-  ]);
+  const [tasks, setTasks] = useState<Task[]>([]);
+  useEffect(() => {
+    async function loadTasks() {
+      const { data, error } = await supabase
+        .from<{
+          id: string;
+          title: string;
+          description: string | null;
+          status: "pending" | "done";
+          priority: "high" | "medium" | "low";
+          due_date: string | null;
+          project_id: string | null;
+        }>("tasks")
+        .select("*")
+        .order("created_at", { ascending: true });
+      if (error) {
+        console.error("Error loading tasks:", error);
+      } else if (data) {
+        setTasks(
+          data.map((t) => ({
+            id: t.id,
+            title: t.title,
+            status: t.status,
+            priority: t.priority,
+            dueDate: t.due_date ?? undefined,
+            description: t.description ?? undefined,
+            projectId: t.project_id ?? undefined,
+            linkedNoteIds: [],
+          })),
+        );
+      }
+    }
+    loadTasks();
+  }, []);
 
   const [notes, setNotes] = useState<Note[]>(SAMPLE_NOTES);
+  // Día seleccionado en el calendario semanal (YYYY-MM-DD)
+  const { selectedDate, setSelectedDate } = useSelectedDate();
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
   const [taskDialogOpen, setTaskDialogOpen] = useState(false);
   const [isNewTask, setIsNewTask] = useState(false);
 
-  const pendingTasks = tasks.filter((task) => task.status === "pending");
-  const completedTasks = tasks.filter((task) => task.status === "done");
+  // Filtrar tareas por día seleccionado
+  const pendingTasks = tasks.filter(
+    (task) => task.status === 'pending' && task.dueDate === selectedDate
+  );
+  const completedTasks = tasks.filter(
+    (task) => task.status === 'done' && task.dueDate === selectedDate
+  );
 
   const progressPercentage = Math.round(
     (completedTasks.length / tasks.length) * 100,
@@ -187,15 +184,91 @@ export function Dashboard() {
     setTaskDialogOpen(true);
   };
 
-  const handleUpdateTask = (updatedTask: Task) => {
-    setTasks(
-      tasks.map((task) => (task.id === updatedTask.id ? updatedTask : task)),
-    );
+  // Actualiza tarea existente en Supabase y estado local
+  const handleUpdateTask = async (updatedTask: Task) => {
+    const { data, error } = await supabase
+      .from<{
+        id: string;
+        title: string;
+        description: string | null;
+        status: "pending" | "done";
+        priority: "high" | "medium" | "low";
+        due_date: string | null;
+        project_id: string | null;
+      }>("tasks")
+      .update({
+        title: updatedTask.title,
+        description: updatedTask.description ?? null,
+        status: updatedTask.status,
+        priority: updatedTask.priority,
+        due_date: updatedTask.dueDate ?? null,
+        project_id: updatedTask.projectId ?? null,
+      })
+      .eq("id", updatedTask.id)
+      .select("*")
+      .single();
+    if (error) {
+      console.error("Error updating task:", error);
+    } else if (data) {
+      setTasks(
+        tasks.map((task) =>
+          task.id === data.id
+            ? {
+                id: data.id,
+                title: data.title,
+                status: data.status,
+                priority: data.priority,
+                dueDate: data.due_date ?? undefined,
+                description: data.description ?? undefined,
+                projectId: data.project_id ?? undefined,
+                linkedNoteIds: updatedTask.linkedNoteIds,
+              }
+            : task,
+        ),
+      );
+    }
     setTaskDialogOpen(false);
   };
 
-  const handleSaveNewTask = (newTask: Task) => {
-    setTasks([...tasks, newTask]);
+  // Crea nueva tarea en Supabase y agrega al estado local
+  const handleSaveNewTask = async (newTask: Task) => {
+    const { data, error } = await supabase
+      .from<{
+        id: string;
+        title: string;
+        description: string | null;
+        status: "pending" | "done";
+        priority: "high" | "medium" | "low";
+        due_date: string | null;
+        project_id: string | null;
+      }>("tasks")
+      .insert({
+        title: newTask.title,
+        description: newTask.description ?? null,
+        status: newTask.status,
+        priority: newTask.priority,
+        due_date: newTask.dueDate ?? null,
+        project_id: newTask.projectId ?? null,
+      })
+      .select("*")
+      .single();
+    if (error) {
+      console.error("Error creating task:", error);
+    } else if (data) {
+      setTasks([
+        ...tasks,
+        {
+          id: data.id,
+          title: data.title,
+          status: data.status,
+          priority: data.priority,
+          dueDate: data.due_date ?? undefined,
+          description: data.description ?? undefined,
+          projectId: data.project_id ?? undefined,
+          linkedNoteIds: [],
+        },
+      ]);
+    }
     setTaskDialogOpen(false);
   };
 
@@ -210,14 +283,24 @@ export function Dashboard() {
     });
   };
 
-  // Nueva función para quitar la fecha de una tarea
-  const removeDueDate = (e: React.MouseEvent, taskId: string) => {
+  // Función para quitar la fecha de una tarea (actualiza en Supabase)
+  const removeDueDate = async (e: React.MouseEvent, taskId: string) => {
     e.stopPropagation(); // Evitar que se abra el diálogo de tarea
 
     // Encontrar la tarea para mostrar su título en la notificación
     const taskToUpdate = tasks.find((task) => task.id === taskId);
 
-    // Actualizar la tarea para quitar la fecha
+    // Actualizar la fecha en la base de datos
+    const { error: removeError } = await supabase
+      .from('tasks')
+      .update({ due_date: null })
+      .eq('id', taskId);
+    if (removeError) {
+      console.error('Error removing due date:', removeError);
+      toast({ title: 'Error', description: 'No se pudo quitar la fecha de la tarea.' });
+      return;
+    }
+    // Actualizar estado local
     setTasks(
       tasks.map((task) =>
         task.id === taskId ? { ...task, dueDate: undefined } : task,
@@ -253,7 +336,8 @@ export function Dashboard() {
   const formatDate = (dateString?: string) => {
     if (!dateString) return null;
 
-    const date = new Date(dateString);
+    // Parse date string as local date (avoid timezone shift)
+    const date = new Date(`${dateString}T00:00:00`);
     const today = new Date();
     const tomorrow = new Date(today);
     tomorrow.setDate(tomorrow.getDate() + 1);
@@ -279,7 +363,7 @@ export function Dashboard() {
     <div className="space-y-6" data-oid="agnad0s">
       <div className="space-y-2" data-oid="fy69c7u">
         <h1 className="text-2xl font-bold" data-oid="57nt3-f">
-          Hoy
+          {formatDate(selectedDate) ?? selectedDate}
         </h1>
         <div className="flex items-center gap-4" data-oid="-w4p0pr">
           <Progress
@@ -294,7 +378,12 @@ export function Dashboard() {
         </div>
       </div>
 
-      <WeeklyCalendar data-oid="n5qqcf_" />
+      <WeeklyCalendar
+        selectedDate={selectedDate}
+        onSelectDate={setSelectedDate}
+        tasks={tasks}
+        data-oid="n5qqcf_"
+      />
 
       <div
         className="flex justify-between items-center mb-2"
@@ -335,6 +424,23 @@ export function Dashboard() {
                   <p className="font-medium" data-oid="4fak8l-">
                     {task.title}
                   </p>
+                  {/* Etiqueta de proyecto relacionado */}
+                  {(() => {
+                    const prj = PROJECTS.find((p) => p.id === task.projectId);
+                    if (!prj) return null;
+                    return (
+                      <Badge
+                        className="text-xs mb-1"
+                        style={{
+                          backgroundColor: prj.color,
+                          borderColor: prj.color,
+                          color: '#fff',
+                        }}
+                      >
+                        {prj.name}
+                      </Badge>
+                    );
+                  })()}
                   <div
                     className="flex items-center gap-2 mt-1"
                     data-oid="jq0r54j"
@@ -415,6 +521,23 @@ export function Dashboard() {
                   <p className="font-medium" data-oid="h6ew:zf">
                     {task.title}
                   </p>
+                  {/* Etiqueta de proyecto relacionado */}
+                  {(() => {
+                    const prj = PROJECTS.find((p) => p.id === task.projectId);
+                    if (!prj) return null;
+                    return (
+                      <Badge
+                        className="text-xs mb-1"
+                        style={{
+                          backgroundColor: prj.color,
+                          borderColor: prj.color,
+                          color: '#fff',
+                        }}
+                      >
+                        {prj.name}
+                      </Badge>
+                    );
+                  })()}
                   <div
                     className="flex items-center gap-2 mt-1"
                     data-oid="ngg:l90"
@@ -468,6 +591,7 @@ export function Dashboard() {
           onSaveNew={handleSaveNewTask}
           isNew={isNewTask}
           projectNotes={notes}
+          projects={PROJECTS}
           onUpdateNote={handleUpdateNote}
           data-oid="qmqhf28"
         />

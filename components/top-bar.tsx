@@ -1,4 +1,5 @@
 "use client";
+import { TIME_ZONE } from "@/lib/utils";
 
 import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
@@ -19,6 +20,7 @@ export function TopBar({ onToggleFocus }: { onToggleFocus: () => void }) {
   }, []);
 
   const formattedDate = new Intl.DateTimeFormat("es-ES", {
+    timeZone: TIME_ZONE,
     weekday: "long",
     day: "numeric",
     month: "long",
@@ -26,8 +28,10 @@ export function TopBar({ onToggleFocus }: { onToggleFocus: () => void }) {
   }).format(currentTime);
 
   const formattedTime = new Intl.DateTimeFormat("es-ES", {
+    timeZone: TIME_ZONE,
     hour: "2-digit",
     minute: "2-digit",
+    hour12: true,
   }).format(currentTime);
 
   const toggleFocus = () => {

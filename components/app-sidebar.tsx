@@ -18,7 +18,7 @@ export function AppSidebar() {
     {
       title: "Hoy",
       icon: Home,
-      href: "/",
+      href: "/hoy",
       shortcut: "H",
     },
     {

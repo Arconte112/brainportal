@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, FormEvent } from "react";
 import {
   Dialog,
   DialogContent,
@@ -20,6 +20,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 
+import { supabase } from "@/lib/supabaseClient";
 // Tipo para los eventos
 type Event = {
   id: string;
@@ -94,6 +95,58 @@ export function QuickCreateDialog({
   onOpenChange: (open: boolean) => void;
 }) {
   const [activeTab, setActiveTab] = useState("task");
+  // Estados para nueva tarea
+  const [taskTitle, setTaskTitle] = useState("");
+  const [taskDescription, setTaskDescription] = useState("");
+  // Estados para nuevo evento
+  const [eventTitle, setEventTitle] = useState("");
+  const [eventDescription, setEventDescription] = useState("");
+  // Estados para creación de tarea rápida - REMOVED DUPLICATE
+  // const [taskTitle, setTaskTitle] = useState("");
+  // const [taskDescription, setTaskDescription] = useState("");
+  const todayDate = new Date().toISOString().split("T")[0];
+
+  // Envío de formulario para crear tarea
+  const handleTaskSubmit = async (e: FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    const { data, error } = await supabase
+      .from('tasks')
+      .insert({ title: taskTitle, description: taskDescription || null, due_date: todayDate });
+    if (error) {
+      console.error('Error creating task:', error);
+    }
+    setTaskTitle("");
+    setTaskDescription("");
+    onOpenChange(false);
+    // Refrescar para mostrar cambios
+    window.location.reload();
+  };
+  
+  // Envío de formulario para crear evento
+  const handleEventSubmit = async (e: FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    // Convert selected date and time to proper ISO strings (local to UTC)
+    const start = new Date(`${selectedDate}T${startTime}`);
+    const end = new Date(`${selectedDate}T${endTime}`);
+    const startIso = start.toISOString();
+    const endIso = end.toISOString();
+    const { data, error } = await supabase
+      .from('events')
+      .insert({
+        title: eventTitle,
+        description: eventDescription || null,
+        start_time: startIso,
+        end_time: endIso,
+        priority: 'medium',
+      });
+    if (error) {
+      console.error('Error creating event:', error);
+    }
+    setEventTitle("");
+    setEventDescription("");
+    onOpenChange(false);
+    window.location.reload();
+  };
   const [selectedDate, setSelectedDate] = useState<string>(
     new Date().toISOString().split("T")[0],
   );
@@ -194,23 +247,39 @@ export function QuickCreateDialog({
             </TabsTrigger>
           </TabsList>
           <TabsContent value="task" className="space-y-4" data-oid="ti3urkm">
-            <div className="space-y-2" data-oid="p.bcbv1">
-              <Input placeholder="Título de la tarea" data-oid="mm-5b.f" />
-              <Textarea
-                placeholder="Descripción (opcional)"
-                rows={3}
-                data-oid="0ozf4s."
-              />
-            </div>
-            <div className="flex justify-end" data-oid="j4hxd.k">
-              <Button type="submit" data-oid="35y8xfn">
-                Crear Tarea
-              </Button>
-            </div>
+            <form onSubmit={handleTaskSubmit} className="space-y-4">
+              <div className="space-y-2" data-oid="p.bcbv1">
+                <Input
+                  placeholder="Título de la tarea"
+                  value={taskTitle}
+                  onChange={(e) => setTaskTitle(e.target.value)}
+                  data-oid="mm-5b.f"
+                />
+                <Textarea
+                  placeholder="Descripción (opcional)"
+                  rows={3}
+                  value={taskDescription}
+                  onChange={(e) => setTaskDescription(e.target.value)}
+                  data-oid="0ozf4s."
+                />
+              </div>
+              <div className="flex justify-end" data-oid="j4hxd.k">
+                <Button type="submit" data-oid="35y8xfn">
+                  Crear Tarea
+                </Button>
+              </div>
+            </form>
           </TabsContent>
           <TabsContent value="event" className="space-y-4" data-oid="qyyw_j1">
-            <div className="space-y-2" data-oid="ruvhek5">
-              <Input placeholder="Título del evento" data-oid="24qvlwj" />
+            <form onSubmit={handleEventSubmit} className="space-y-4">
+              <div className="space-y-2" data-oid="ruvhek5">
+                <Input
+                  placeholder="Título del evento"
+                  value={eventTitle}
+                  onChange={(e) => setEventTitle(e.target.value)}
+                  data-oid="24qvlwj"
+                />
+              </div>
               <div className="grid grid-cols-1 gap-2" data-oid="vqj0g38">
                 <div data-oid="bg7.7kl">
                   <label
@@ -302,6 +371,8 @@ export function QuickCreateDialog({
               <Textarea
                 placeholder="Descripción (opcional)"
                 rows={3}
+                value={eventDescription}
+                onChange={(e) => setEventDescription(e.target.value)}
                 data-oid="7h..pmv"
               />
 
@@ -309,7 +380,7 @@ export function QuickCreateDialog({
               <div className="mt-4" data-oid="228_kk7">
                 <h3 className="text-sm font-medium mb-2" data-oid="k5vqd8g">
                   Eventos para{" "}
-                  {new Date(selectedDate).toLocaleDateString("es-ES", {
+                  {new Date(selectedDate + "T00:00:00").toLocaleDateString("es-ES", { // Added T00:00:00 to ensure correct date parsing across timezones
                     weekday: "long",
                     day: "numeric",
                     month: "long",
@@ -380,23 +451,27 @@ export function QuickCreateDialog({
                   </div>
                 </div>
               </div>
-            </div>
-            <div className="flex justify-end" data-oid="sqs3gq9">
-              <Button type="submit" data-oid="w6jw:hc">
-                Crear Evento
-              </Button>
-            </div>
+              {/* Removed extra closing div tag here */}
+              <div className="flex justify-end" data-oid="sqs3gq9">
+                <Button type="submit" data-oid="w6jw:hc">
+                  Crear Evento
+                </Button>
+              </div>
+            </form>
           </TabsContent>
           <TabsContent value="note" className="space-y-4" data-oid="l7bi6f1">
-            <div className="space-y-2" data-oid="7nye_:v">
-              <Input placeholder="Título de la nota" data-oid="ff52z.y" />
-              <Textarea placeholder="Contenido" rows={5} data-oid="8rkeqdw" />
-            </div>
-            <div className="flex justify-end" data-oid="wo8c_b9">
-              <Button type="submit" data-oid="73re1nh">
-                Crear Nota
-              </Button>
-            </div>
+            {/* Assuming a form would be here for note creation */}
+            <form className="space-y-4"> {/* Added form for consistency, can be enhanced later */}
+              <div className="space-y-2" data-oid="7nye_:v">
+                <Input placeholder="Título de la nota" data-oid="ff52z.y" />
+                <Textarea placeholder="Contenido" rows={5} data-oid="8rkeqdw" />
+              </div>
+              <div className="flex justify-end" data-oid="wo8c_b9">
+                <Button type="submit" data-oid="73re1nh">
+                  Crear Nota
+                </Button>
+              </div>
+            </form>
           </TabsContent>
         </Tabs>
       </DialogContent>

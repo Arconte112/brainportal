@@ -17,6 +17,7 @@ import Link from "next/link";
 import { Progress } from "@/components/ui/progress";
 import { NoteDialog } from "./note-dialog";
 import { TaskDialog } from "./task-dialog";
+import { Badge } from "@/components/ui/badge";
 import type { Task, Note } from "./dashboard";
 import { toast } from "@/components/ui/use-toast";
 
@@ -25,30 +26,35 @@ type Project = {
   id: string;
   name: string;
   description?: string;
+  color?: string; // Color personalizado para la etiqueta
 };
 
 // Datos de ejemplo
-const PROJECTS: Project[] = [
+export const PROJECTS: Project[] = [
   {
     id: "1",
     name: "Rediseño Web",
     description: "Proyecto de rediseño del sitio web corporativo",
+    color: "#6366F1",
   },
   {
     id: "2",
     name: "Campaña Marketing",
     description: "Campaña de marketing digital para el Q2",
+    color: "#10B981",
   },
   {
     id: "3",
     name: "Desarrollo App",
     description: "Desarrollo de aplicación móvil para clientes",
+    color: "#F59E0B",
   },
   {
     id: "4",
     name: "Investigación UX",
     description:
       "Investigación de experiencia de usuario para nuevos productos",
+    color: "#EF4444",
   },
 ];
 
@@ -527,6 +533,23 @@ export function ProjectDetail({ projectId }: { projectId: string }) {
                       <p className="font-medium" data-oid="jwa9khb">
                         {task.title}
                       </p>
+                      {/* Etiqueta de proyecto relacionado */}
+                      {(() => {
+                        const prj = PROJECTS.find((p) => p.id === task.projectId);
+                        if (!prj) return null;
+                        return (
+                          <Badge
+                            className="text-xs mb-1"
+                            style={{
+                              backgroundColor: prj.color,
+                              borderColor: prj.color,
+                              color: '#fff',
+                            }}
+                          >
+                            {prj.name}
+                          </Badge>
+                        );
+                      })()}
                       <div
                         className="flex items-center gap-2 mt-1"
                         data-oid="gfjsgvk"
@@ -627,6 +650,23 @@ export function ProjectDetail({ projectId }: { projectId: string }) {
                       <p className="font-medium" data-oid="29ffemo">
                         {task.title}
                       </p>
+                      {/* Etiqueta de proyecto relacionado */}
+                      {(() => {
+                        const prj = PROJECTS.find((p) => p.id === task.projectId);
+                        if (!prj) return null;
+                        return (
+                          <Badge
+                            className="text-xs mb-1"
+                            style={{
+                              backgroundColor: prj.color,
+                              borderColor: prj.color,
+                              color: '#fff',
+                            }}
+                          >
+                            {prj.name}
+                          </Badge>
+                        );
+                      })()}
                       <div
                         className="flex items-center gap-2 mt-1"
                         data-oid="a7rnstb"
@@ -763,6 +803,7 @@ export function ProjectDetail({ projectId }: { projectId: string }) {
           isNew={isNewTask}
           projectNotes={notes}
           onUpdateNote={handleNoteUpdate}
+          projects={PROJECTS}
           data-oid="0:0ek23"
         />
       )}

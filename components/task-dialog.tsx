@@ -42,6 +42,7 @@ interface TaskDialogProps {
   isNew: boolean;
   projectNotes: Note[]; // Notas disponibles para enlazar
   onUpdateNote?: (note: Note) => void; // Nueva prop para actualizar notas
+  projects?: { id: string; name: string; color?: string }[]; // Lista de proyectos para enlace
 }
 
 export function TaskDialog({
@@ -53,6 +54,7 @@ export function TaskDialog({
   isNew,
   projectNotes,
   onUpdateNote,
+  projects = [],
 }: TaskDialogProps) {
   const [editedTask, setEditedTask] = useState<Task>(task);
   const [isEditing, setIsEditing] = useState(isNew);
@@ -101,6 +103,14 @@ export function TaskDialog({
   const handleChange = (field: keyof Task, value: string) => {
     setEditedTask((prev) => ({ ...prev, [field]: value }));
   };
+  // Maneja cambio de proyecto relacionado; 'none' limpia selección
+  const handleProjectChange = (value: string) => {
+    setEditedTask((prev) =>
+      value === "none"
+        ? { ...prev, projectId: undefined }
+        : { ...prev, projectId: value }
+    );
+  };
 
   const handleAddNote = () => {
     if (selectedNoteId === "none") return;
@@ -143,8 +153,15 @@ export function TaskDialog({
     setEditedNote((prev) => ({ ...prev!, [field]: value }));
   };
 
+  // Filtrar notas según proyecto seleccionado
+  const filteredProjectNotes = editedTask.projectId
+    ? projectNotes.filter(
+        (note) =>
+          note.projectId === editedTask.projectId || !note.projectId,
+      )
+    : projectNotes;
   // Filtrar notas que aún no han sido añadidas
-  const availableNotes = projectNotes.filter(
+  const availableNotes = filteredProjectNotes.filter(
     (note) => !linkedNotes.some((linkedNote) => linkedNote.id === note.id),
   );
 
@@ -211,6 +228,27 @@ export function TaskDialog({
                     rows={4}
                   />
                 </div>
+                {projects.length > 0 && (
+                  <div className="space-y-2">
+                    <Label htmlFor="project">Proyecto relacionado</Label>
+                    <Select
+                      value={editedTask.projectId ?? "none"}
+                      onValueChange={handleProjectChange}
+                    >
+                      <SelectTrigger className="flex-1">
+                        <SelectValue placeholder="Seleccionar proyecto" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="none">Sin proyecto</SelectItem>
+                        {projects.map((project) => (
+                          <SelectItem key={project.id} value={project.id}>
+                            {project.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
                 {projectNotes.length > 0 && (
                   <div className="space-y-2">
                     <Label>Notas relacionadas</Label>

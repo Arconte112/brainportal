@@ -1,0 +1,55 @@
+---
+description: 
+globs: 
+alwaysApply: true
+---
+# BrainPortal - Project Overview
+
+BrainPortal es una aplicación web de productividad minimalista diseñada para ayudar a los usuarios a organizar sus tareas, proyectos y calendario.
+
+## Características Principales Identificadas:
+
+*   **Gestión de Tareas y Proyectos:** Se infiere por la estructura de directorios `app/projects/` y `app/projects/tasks/`, y los componentes como `[project-tasks-list.tsx](mdc:components/project-tasks-list.tsx)` y `[project-detail.tsx](mdc:components/project-detail.tsx)`.
+*   **Calendario/Agenda:** Indicado por `app/calendar/`, el componente `[weekly-calendar.tsx](mdc:components/weekly-calendar.tsx)` y la sección de "Eventos de hoy" y "Próximos eventos" en `[app-layout.tsx](mdc:components/app-layout.tsx)`.
+*   **Archivo:** Una sección para archivar elementos, visible en `app/archive/` y `[archive.tsx](mdc:components/archive.tsx)`.
+*   **Configuración:** Sección de ajustes en `app/settings/` y `[settings.tsx](mdc:components/settings.tsx)`.
+*   **Dashboard Principal:** Punto de entrada que muestra información relevante, implementado en `[dashboard.tsx](mdc:components/dashboard.tsx)`.
+*   **Modo Foco:** Una funcionalidad para minimizar distracciones ocultando la barra lateral y la barra superior, controlada en `[app-layout.tsx](mdc:components/app-layout.tsx)`.
+*   **ChatBot:** Un asistente de chat, componente `[chat-bot.tsx](mdc:components/chat-bot.tsx)`, accesible mediante la barra espaciadora.
+*   **Creación Rápida (Quick Create):** Funcionalidad para crear elementos rápidamente, accesible con la tecla 'c' (actualmente en desarrollo, según `[app-layout.tsx](mdc:components/app-layout.tsx)`).
+
+## Tecnologías Utilizadas:
+
+*   **Framework Principal:** [Next.js (v15.2.4)](mdc:https:/nextjs.org) - Un framework de React para producción.
+*   **Lenguaje:** [TypeScript](mdc:https:/www.typescriptlang.org) - JavaScript con tipado estático.
+*   **UI (Interfaz de Usuario):**
+    *   [React (v19)](mdc:https:/react.dev) - Biblioteca para construir interfaces de usuario.
+    *   [Shadcn/UI](mdc:https:/ui.shadcn.com) - Colección de componentes de UI reutilizables. Se evidencia por el uso de `@radix-ui/*`, `lucide-react`, `class-variance-authority`, `clsx`, `tailwind-merge`, `tailwindcss-animate` y `[components.json](mdc:components.json)`.
+    *   [Tailwind CSS](mdc:https:/tailwindcss.com) - Framework CSS "utility-first". Configurado en `[tailwind.config.ts](mdc:tailwind.config.ts)`.
+*   **Gestión de Formularios:** [React Hook Form](mdc:https:/react-hook-form.com) y [Zod](mdc:https:/zod.dev) para validación.
+*   **Componentes de UI Adicionales:**
+    *   Calendarios/Fechas: `date-fns`, `react-day-picker`.
+    *   Gráficos: `recharts`.
+    *   Notificaciones (Toasts): `sonner`.
+*   **Gestor de Paquetes:** Se infiere el uso de `pnpm` por `pnpm-lock.yaml` o `bun` por `bun.lock`. El archivo `package.json` es el manifiesto del proyecto.
+
+## Puntos de Entrada y Estructura Clave:
+
+*   **Layout Principal:** `[app/layout.tsx](mdc:app/layout.tsx)` define la estructura HTML base, tema (oscuro por defecto) y proveedor de notificaciones.
+*   **Página de Inicio:** `[app/page.tsx](mdc:app/page.tsx)` renderiza el `[AppLayout](mdc:components/app-layout.tsx)` y el `[Dashboard](mdc:components/dashboard.tsx)`.
+*   **Layout de la Aplicación:** `[components/app-layout.tsx](mdc:components/app-layout.tsx)` contiene la lógica principal de la disposición de la UI, incluyendo `[AppSidebar](mdc:components/app-sidebar.tsx)`, `[TopBar](mdc:components/top-bar.tsx)`, y la gestión del modo foco y eventos.
+
+## Configuración del Proyecto:
+
+*   **Next.js:** Configurado en `[next.config.mjs](mdc:next.config.mjs)`. Destaca la omisión de errores de ESLint/TypeScript en el build y la no optimización de imágenes.
+*   **TypeScript:** Configurado en `[tsconfig.json](mdc:tsconfig.json)`.
+*   **Tailwind CSS:** Configurado en `[tailwind.config.ts](mdc:tailwind.config.ts)` y `[postcss.config.mjs](mdc:postcss.config.mjs)`.
+*   **Estilos Globales:** `[app/globals.css](mdc:app/globals.css)`.
+
+## Scripts Principales (desde `[package.json](mdc:package.json)`):
+
+*   `dev`: Inicia el servidor de desarrollo Next.js.
+*   `build`: Compila la aplicación para producción.
+*   `start`: Inicia el servidor de producción Next.js.
+*   `lint`: Ejecuta el linter de Next.js.
+
