@@ -6,6 +6,7 @@ import { ChevronLeft, ChevronRight } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { supabase } from "@/lib/supabaseClient";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogClose } from "@/components/ui/dialog";
+import { Badge } from "@/components/ui/badge";
 
 // Evento para el calendario extraído de Supabase
 type CalendarEvent = {
@@ -17,12 +18,15 @@ type CalendarEvent = {
 };
 // Tareas para el día seleccionado
 type CalendarTask = { id: string; title: string; status: string; priority: string };
+// Tareas del mes actual (incluye due_date)
+type CalendarTaskMonthly = { id: string; title: string; status: string; priority: string; due_date: string };
 
 export function Calendar() {
   const [currentDate, setCurrentDate] = useState(new Date());
   const [events, setEvents] = useState<CalendarEvent[]>([]);
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
   const [tasks, setTasks] = useState<CalendarTask[]>([]);
+  const [monthlyTasks, setMonthlyTasks] = useState<CalendarTaskMonthly[]>([]);
 
   const getDaysInMonth = (year: number, month: number) => {
     return new Date(year, month + 1, 0).getDate();
@@ -63,7 +67,7 @@ export function Calendar() {
     setSelectedDate(date);
   };
 
-  // Cargar eventos desde Supabase para el mes actual
+  // Cargar eventos y tareas desde Supabase para el mes actual
   useEffect(() => {
     const loadEventsForMonth = async () => {
       const startOfMonth = new Date(year, month, 1);
@@ -79,7 +83,24 @@ export function Calendar() {
       if (error) console.error("Error loading calendar events:", error);
       else setEvents(data ?? []);
     };
+
+    const loadTasksForMonth = async () => {
+      const startDate = new Date(year, month, 1);
+      const endDate = new Date(year, month + 1, 1);
+      const startStr = `${startDate.getFullYear()}-${String(startDate.getMonth() + 1).padStart(2, '0')}-${String(startDate.getDate()).padStart(2, '0')}`;
+      const endStr = `${endDate.getFullYear()}-${String(endDate.getMonth() + 1).padStart(2, '0')}-${String(endDate.getDate()).padStart(2, '0')}`;
+      const { data: tasksData, error: tasksError } = await supabase
+        .from("tasks")
+        .select("id, title, status, priority, due_date")
+        .gte("due_date", startStr)
+        .lt("due_date", endStr)
+        .order("due_date", { ascending: true });
+      if (tasksError) console.error("Error loading calendar tasks:", tasksError);
+      else setMonthlyTasks(tasksData ?? []);
+    };
+
     loadEventsForMonth();
+    loadTasksForMonth();
   }, [year, month]);
 
   // Adjust for Sunday as first day (0) to Monday as first day (1)
@@ -110,6 +131,10 @@ export function Calendar() {
       today.getMonth() === month &&
       today.getFullYear() === year
     );
+  };
+  const getTasksCountForDay = (day: number) => {
+    const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+    return monthlyTasks.filter((task) => task.due_date === dateStr).length;
   };
 
   return (
@@ -195,6 +220,11 @@ export function Calendar() {
                     </div>
                   ))}
                 </div>
+                {getTasksCountForDay(day) > 0 && (
+                  <Badge className="absolute bottom-1 right-1">
+                    {getTasksCountForDay(day)}
+                  </Badge>
+                )}
               </>
             )}
           </div>

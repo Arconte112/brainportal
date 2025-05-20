@@ -153,6 +153,7 @@ export function TaskDialog({
     setEditedNote((prev) => ({ ...prev!, [field]: value }));
   };
 
+  // Resetear filtro de notas al cambiar de proyecto
   // Filtrar notas según proyecto seleccionado
   const filteredProjectNotes = editedTask.projectId
     ? projectNotes.filter(
@@ -284,7 +285,7 @@ export function TaskDialog({
                           <SelectItem value="none">
                             Seleccionar nota...
                           </SelectItem>
-                          {availableNotes.map((note) => (
+                        {availableNotes.map((note) => (
                             <SelectItem key={note.id} value={note.id}>
                               <div className="flex items-center">
                                 <FileText className="h-4 w-4 mr-2 text-muted-foreground" />
@@ -308,12 +309,11 @@ export function TaskDialog({
                         <Plus className="h-4 w-4" />
                       </Button>
                     </div>
-                    {availableNotes.length === 0 &&
-                      linkedNotes.length < projectNotes.length && (
-                        <p className="text-xs text-muted-foreground mt-1">
-                          Todas las notas disponibles ya han sido añadidas.
-                        </p>
-                      )}
+                    {availableNotes.length === 0 && linkedNotes.length < projectNotes.length && (
+                      <p className="text-xs text-muted-foreground mt-1">
+                        Todas las notas disponibles ya han sido añadidas.
+                      </p>
+                    )}
                   </div>
                 )}
                 {!isNew && (

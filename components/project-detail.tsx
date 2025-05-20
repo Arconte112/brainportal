@@ -20,6 +20,7 @@ import { TaskDialog } from "./task-dialog";
 import { Badge } from "@/components/ui/badge";
 import type { Task, Note } from "./dashboard";
 import { toast } from "@/components/ui/use-toast";
+import { supabase } from "@/lib/supabaseClient";
 
 // Tipos de datos
 type Project = {
@@ -263,6 +264,19 @@ export function ProjectDetail({ projectId }: { projectId: string }) {
   const [project, setProject] = useState<Project | null>(null);
   const [tasks, setTasks] = useState<Task[]>([]);
   const [notes, setNotes] = useState<Note[]>([]);
+  const [allProjects, setAllProjects] = useState<Project[]>([]);
+
+  // Cargar lista de proyectos reales para asignar tareas
+  useEffect(() => {
+    const loadProjects = async () => {
+      const { data: prjs, error: prjErr } = await supabase
+        .from<Project>('projects')
+        .select('id,name,description,color');
+      if (prjErr) console.error('Error fetching projects list:', prjErr);
+      else setAllProjects(prjs ?? []);
+    };
+    loadProjects();
+  }, []);
   const [activeTab, setActiveTab] = useState("tasks");
 
   // Estado para el diálogo de notas
@@ -274,15 +288,61 @@ export function ProjectDetail({ projectId }: { projectId: string }) {
   const [taskDialogOpen, setTaskDialogOpen] = useState(false);
   const [isNewTask, setIsNewTask] = useState(false);
 
+  // Cargar proyecto, tareas y notas desde Supabase
+  const fetchProjectData = async () => {
+    // Proyecto
+    const { data: proj, error: projErr } = await supabase
+      .from<Project>('projects')
+      .select('id,name,description,color')
+      .eq('id', projectId)
+      .single();
+    if (projErr) {
+      console.error('Error fetching project:', projErr);
+      return;
+    }
+    setProject(proj);
+    // Tareas
+    const { data: tks, error: tksErr } = await supabase
+      .from('tasks')
+      .select('*')
+      .eq('project_id', projectId);
+    if (tksErr) {
+      console.error('Error fetching tasks:', tksErr);
+    } else {
+      setTasks(
+        tks.map((t) => ({
+          id: t.id,
+          title: t.title,
+          status: t.status,
+          priority: t.priority,
+          projectId: t.project_id,
+          dueDate: t.due_date || undefined,
+          description: t.description || undefined,
+          linkedNoteIds: [],
+        })),
+      );
+    }
+    // Notas
+    const { data: nts, error: ntsErr } = await supabase
+      .from('notes')
+      .select('*')
+      .eq('project_id', projectId);
+    if (ntsErr) {
+      console.error('Error fetching notes:', ntsErr);
+    } else {
+      setNotes(
+        nts.map((n) => ({
+          id: n.id,
+          title: n.title,
+          content: n.content,
+          projectId: n.project_id,
+          date: n.date,
+        })),
+      );
+    }
+  };
   useEffect(() => {
-    // En una aplicación real, esto sería una llamada a una API
-    const foundProject = PROJECTS.find((p) => p.id === projectId) || null;
-    const projectTasks = TASKS.filter((t) => t.projectId === projectId);
-    const projectNotes = NOTES.filter((n) => n.projectId === projectId);
-
-    setProject(foundProject);
-    setTasks(projectTasks);
-    setNotes(projectNotes);
+    fetchProjectData();
   }, [projectId]);
 
   if (!project) {
@@ -356,16 +416,37 @@ export function ProjectDetail({ projectId }: { projectId: string }) {
     setTaskDialogOpen(true);
   };
 
-  const handleUpdateTask = (updatedTask: Task) => {
-    setTasks(
-      tasks.map((task) => (task.id === updatedTask.id ? updatedTask : task)),
-    );
+  const handleUpdateTask = async (updatedTask: Task) => {
+    const { error } = await supabase
+      .from('tasks')
+      .update({
+        title: updatedTask.title,
+        description: updatedTask.description || null,
+        status: updatedTask.status,
+        priority: updatedTask.priority,
+        due_date: updatedTask.dueDate || null,
+        project_id: updatedTask.projectId,
+      })
+      .eq('id', updatedTask.id);
+    if (error) console.error('Error updating task:', error);
     setTaskDialogOpen(false);
+    fetchProjectData();
   };
 
-  const handleSaveNewTask = (newTask: Task) => {
-    setTasks([...tasks, newTask]);
+  const handleSaveNewTask = async (newTask: Task) => {
+    const { error } = await supabase
+      .from('tasks')
+      .insert({
+        title: newTask.title,
+        description: newTask.description || null,
+        status: newTask.status,
+        priority: newTask.priority,
+        due_date: newTask.dueDate || null,
+        project_id: newTask.projectId,
+      });
+    if (error) console.error('Error creating task:', error);
     setTaskDialogOpen(false);
+    fetchProjectData();
   };
 
   // Funciones para manejar notas
@@ -374,18 +455,23 @@ export function ProjectDetail({ projectId }: { projectId: string }) {
     setNoteDialogOpen(true);
   };
 
-  const handleNoteUpdate = (updatedNote: Note) => {
-    setNotes(
-      notes.map((note) => (note.id === updatedNote.id ? updatedNote : note)),
-    );
-
-    // También actualizar la nota en las tareas que la tienen relacionada
+  const handleNoteUpdate = async (updatedNote: Note) => {
+    const { error } = await supabase
+      .from('notes')
+      .update({
+        title: updatedNote.title,
+        content: updatedNote.content,
+        date: updatedNote.date,
+        project_id: updatedNote.projectId,
+      })
+      .eq('id', updatedNote.id);
+    if (error) console.error('Error updating note:', error);
     toast({
       title: "Nota actualizada",
       description: `La nota "${updatedNote.title}" ha sido actualizada correctamente.`,
     });
-
     setNoteDialogOpen(false);
+    fetchProjectData();
   };
 
   const handleCreateNote = () => {
@@ -400,9 +486,18 @@ export function ProjectDetail({ projectId }: { projectId: string }) {
     setNoteDialogOpen(true);
   };
 
-  const handleSaveNewNote = (newNote: Note) => {
-    setNotes([...notes, newNote]);
+  const handleSaveNewNote = async (newNote: Note) => {
+    const { error } = await supabase
+      .from('notes')
+      .insert({
+        title: newNote.title,
+        content: newNote.content,
+        date: newNote.date,
+        project_id: newNote.projectId,
+      });
+    if (error) console.error('Error creating note:', error);
     setNoteDialogOpen(false);
+    fetchProjectData();
   };
 
   // Función para formatear fechas
@@ -803,7 +898,7 @@ export function ProjectDetail({ projectId }: { projectId: string }) {
           isNew={isNewTask}
           projectNotes={notes}
           onUpdateNote={handleNoteUpdate}
-          projects={PROJECTS}
+          projects={allProjects}
           data-oid="0:0ek23"
         />
       )}

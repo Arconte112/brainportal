@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { supabase } from "@/lib/supabaseClient";
 import { Button } from "@/components/ui/button";
 import {
   Calendar,
@@ -207,19 +208,52 @@ const TASKS: Task[] = [
 ];
 
 export function ProjectTasksList() {
-  const [tasks, setTasks] = useState<Task[]>(TASKS);
-  const [expandedProjects, setExpandedProjects] = useState<
-    Record<string, boolean>
-  >({});
+  const [tasks, setTasks] = useState<Task[]>([]);
+  const [projects, setProjects] = useState<Project[]>([]);
+  const [expandedProjects, setExpandedProjects] = useState<Record<string, boolean>>({});
   const [showCompleted, setShowCompleted] = useState(false);
+  const [loading, setLoading] = useState<boolean>(true);
 
-  // Inicializar todos los proyectos como expandidos
+  // Cargar proyectos y tareas desde Supabase
   useEffect(() => {
-    const initialExpanded: Record<string, boolean> = {};
-    PROJECTS.forEach((project) => {
-      initialExpanded[project.id] = true;
-    });
-    setExpandedProjects(initialExpanded);
+    const fetchData = async () => {
+      setLoading(true);
+      const { data: prjs, error: prjErr } = await supabase
+        .from<Project>('projects')
+        .select('id,name,description');
+      if (prjErr) {
+        console.error('Error fetching projects:', prjErr);
+        setLoading(false);
+        return;
+      }
+      const { data: tks, error: tksErr } = await supabase
+        .from<Task>('tasks')
+        .select('id,title,status,priority,due_date,description,project_id');
+      if (tksErr) {
+        console.error('Error fetching tasks:', tksErr);
+        setLoading(false);
+        return;
+      }
+      setProjects(prjs);
+      const mapped = tks.map((t) => ({
+        id: t.id,
+        title: t.title,
+        status: t.status,
+        priority: t.priority,
+        projectId: t.project_id,
+        dueDate: t.due_date || undefined,
+        description: t.description || undefined,
+      }));
+      setTasks(mapped);
+      // Inicializar proyectos expandidos
+      const initial: Record<string, boolean> = {};
+      prjs.forEach((p) => {
+        initial[p.id] = true;
+      });
+      setExpandedProjects(initial);
+      setLoading(false);
+    };
+    fetchData();
   }, []);
 
   // Función para asignar la fecha actual a una tarea
@@ -256,12 +290,12 @@ export function ProjectTasksList() {
     : tasks.filter((task) => task.status === "pending");
 
   // Agrupar tareas por proyecto
-  const tasksByProject = PROJECTS.map((project) => {
-    return {
+  const tasksByProject = projects
+    .map((project) => ({
       ...project,
       tasks: filteredTasks.filter((task) => task.projectId === project.id),
-    };
-  }).filter((project) => project.tasks.length > 0); // Solo mostrar proyectos con tareas
+    }))
+    .filter((project) => project.tasks.length > 0);
 
   // Formatear fecha
   const formatDate = (dateString?: string) => {

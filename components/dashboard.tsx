@@ -6,11 +6,11 @@ import { useState, useEffect } from "react";
 import { useSelectedDate } from "@/hooks/use-selected-date";
 import { supabase } from "@/lib/supabaseClient";
 import { Progress } from "@/components/ui/progress";
+import { Skeleton } from "@/components/ui/skeleton";
 import { WeeklyCalendar } from "./weekly-calendar";
 import { Button } from "@/components/ui/button";
 import { Plus, Calendar, CalendarOff } from "lucide-react";
 import { TaskDialog } from "./task-dialog";
-import { PROJECTS } from "./project-detail";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "@/components/ui/use-toast";
 import { ToastAction } from "@/components/ui/toast";
@@ -34,64 +34,105 @@ export type Note = {
   projectId: string;
   date: string;
 };
+// Cache for static project list
+let projectsCache: { id: string; name: string; color?: string }[] | null = null;
 
-// Datos de ejemplo para notas
-const SAMPLE_NOTES: Note[] = [
-  {
-    id: "dashboard-note-1",
-    title: "Ideas para mejorar productividad",
-    content:
-      "- Usar la técnica Pomodoro\n- Establecer prioridades claras\n- Eliminar distracciones\n- Agrupar tareas similares",
-    projectId: "personal",
-    date: "2025-05-10",
-  },
-  {
-    id: "dashboard-note-2",
-    title: "Recursos útiles",
-    content:
-      "Enlaces a herramientas y recursos que pueden ser útiles para diferentes proyectos:\n\n- Figma para diseño\n- Notion para documentación\n- GitHub para control de versiones\n- Slack para comunicación",
-    projectId: "personal",
-    date: "2025-05-12",
-  },
-];
+// Notas cargadas desde la base de datos
 
 export function Dashboard() {
   const [tasks, setTasks] = useState<Task[]>([]);
+  const [projects, setProjects] = useState<{ id: string; name: string; color?: string }[]>([]);
+  const [loadingTasks, setLoadingTasks] = useState(true);
+  const [loadingProjects, setLoadingProjects] = useState(true);
   useEffect(() => {
-    async function loadTasks() {
+    const loadTasks = async () => {
+      setLoadingTasks(true);
+      try {
+        const { data, error } = await supabase
+          .from<{
+            id: string;
+            title: string;
+            description: string | null;
+            status: "pending" | "done";
+            priority: "high" | "medium" | "low";
+            due_date: string | null;
+            project_id: string | null;
+          }>("tasks")
+          .select("*")
+          .order("created_at", { ascending: true });
+        if (error) {
+          console.error("Error loading tasks:", error);
+        } else if (data) {
+          setTasks(
+            data.map((t) => ({
+              id: t.id,
+              title: t.title,
+              status: t.status,
+              priority: t.priority,
+              dueDate: t.due_date ?? undefined,
+              description: t.description ?? undefined,
+              projectId: t.project_id ?? undefined,
+              linkedNoteIds: [],
+            })),
+          );
+        }
+      } finally {
+        setLoadingTasks(false);
+      }
+    };
+    loadTasks();
+  }, []);
+  // Cargar lista de proyectos para etiquetas
+  useEffect(() => {
+    const loadProjects = async () => {
+      setLoadingProjects(true);
+      if (projectsCache) {
+        setProjects(projectsCache);
+        setLoadingProjects(false);
+        return;
+      }
+      const { data, error } = await supabase
+        .from<{ id: string; name: string; color?: string }>('projects')
+        .select('id,name,color');
+      if (error) {
+        console.error('Error loading projects:', error);
+      } else {
+        const prjData = data ?? [];
+        setProjects(prjData);
+        projectsCache = prjData;
+      }
+      setLoadingProjects(false);
+    };
+    loadProjects();
+  }, []);
+  // Cargar notas reales desde la base de datos
+  useEffect(() => {
+    const loadNotes = async () => {
       const { data, error } = await supabase
         .from<{
           id: string;
           title: string;
-          description: string | null;
-          status: "pending" | "done";
-          priority: "high" | "medium" | "low";
-          due_date: string | null;
+          content: string | null;
           project_id: string | null;
-        }>("tasks")
-        .select("*")
-        .order("created_at", { ascending: true });
-      if (error) {
-        console.error("Error loading tasks:", error);
-      } else if (data) {
-        setTasks(
-          data.map((t) => ({
-            id: t.id,
-            title: t.title,
-            status: t.status,
-            priority: t.priority,
-            dueDate: t.due_date ?? undefined,
-            description: t.description ?? undefined,
-            projectId: t.project_id ?? undefined,
-            linkedNoteIds: [],
+          date: string;
+        }>('notes')
+        .select('id,title,content,project_id,date');
+      if (error) console.error('Error loading notes:', error);
+      else
+        setNotes(
+          (data ?? []).map((n) => ({
+            id: n.id,
+            title: n.title,
+            content: n.content ?? undefined,
+            projectId: n.project_id ?? undefined,
+            date: n.date,
           })),
         );
-      }
-    }
-    loadTasks();
+    };
+    loadNotes();
   }, []);
 
-  const [notes, setNotes] = useState<Note[]>(SAMPLE_NOTES);
+  const [notes, setNotes] = useState<Note[]>([]);
   // Día seleccionado en el calendario semanal (YYYY-MM-DD)
   const { selectedDate, setSelectedDate } = useSelectedDate();
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
@@ -366,24 +407,36 @@ export function Dashboard() {
           {formatDate(selectedDate) ?? selectedDate}
         </h1>
         <div className="flex items-center gap-4" data-oid="-w4p0pr">
-          <Progress
-            value={progressPercentage}
-            className="h-2 flex-1"
-            data-oid="q0bqs4w"
-          />
+          {loadingTasks ? (
+            <Skeleton className="h-2 flex-1" />
+          ) : (
+            <Progress
+              value={progressPercentage}
+              className="h-2 flex-1"
+              data-oid="q0bqs4w"
+            />
+          )}
 
-          <span className="text-sm text-muted-foreground" data-oid="dgh123w">
-            {progressPercentage}% completado
-          </span>
+          {loadingTasks ? (
+            <Skeleton className="h-4 w-12" />
+          ) : (
+            <span className="text-sm text-muted-foreground" data-oid="dgh123w">
+              {progressPercentage}% completado
+            </span>
+          )}
         </div>
       </div>
 
-      <WeeklyCalendar
-        selectedDate={selectedDate}
-        onSelectDate={setSelectedDate}
-        tasks={tasks}
-        data-oid="n5qqcf_"
-      />
+      {loadingTasks ? (
+        <Skeleton className="h-40 w-full" data-oid="n5qqcf_" />
+      ) : (
+        <WeeklyCalendar
+          selectedDate={selectedDate}
+          onSelectDate={setSelectedDate}
+          tasks={tasks}
+          data-oid="n5qqcf_"
+        />
+      )}
 
       <div
         className="flex justify-between items-center mb-2"
@@ -397,7 +450,20 @@ export function Dashboard() {
         </Button>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4" data-oid="c8:051v">
+      {loadingTasks && (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4" data-oid="c8:051v">
+          {[ 'Pendiente', 'Hecho' ].map((title) => (
+            <div key={title} className="kanban-column">
+              <h2 className="text-lg font-medium mb-3">{title}</h2>
+              {[...Array(3)].map((_, i) => (
+                <Skeleton key={i} className="h-12 mb-2" />
+              ))}
+            </div>
+          ))}
+        </div>
+      )}
+      {!loadingTasks && (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4" data-oid="c8:051v">
         <div
           className="kanban-column"
           onDragOver={handleDragOver}
@@ -426,7 +492,7 @@ export function Dashboard() {
                   </p>
                   {/* Etiqueta de proyecto relacionado */}
                   {(() => {
-                    const prj = PROJECTS.find((p) => p.id === task.projectId);
+                    const prj = projects.find((p) => p.id === task.projectId);
                     if (!prj) return null;
                     return (
                       <Badge
@@ -523,7 +589,7 @@ export function Dashboard() {
                   </p>
                   {/* Etiqueta de proyecto relacionado */}
                   {(() => {
-                    const prj = PROJECTS.find((p) => p.id === task.projectId);
+                    const prj = projects.find((p) => p.id === task.projectId);
                     if (!prj) return null;
                     return (
                       <Badge
@@ -581,6 +647,7 @@ export function Dashboard() {
           ))}
         </div>
       </div>
+      )}
 
       {selectedTask && (
         <TaskDialog
@@ -591,7 +658,7 @@ export function Dashboard() {
           onSaveNew={handleSaveNewTask}
           isNew={isNewTask}
           projectNotes={notes}
-          projects={PROJECTS}
+          projects={projects}
           onUpdateNote={handleUpdateNote}
           data-oid="qmqhf28"
         />

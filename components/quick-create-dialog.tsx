@@ -147,6 +147,21 @@ export function QuickCreateDialog({
     onOpenChange(false);
     window.location.reload();
   };
+  // Estados para nueva nota
+  const [noteTitle, setNoteTitle] = useState<string>("");
+  const [noteContent, setNoteContent] = useState<string>("");
+  // Envío de formulario para crear nota
+  const handleNoteSubmit = async (e: FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    const { data, error } = await supabase
+      .from('notes')
+      .insert({ title: noteTitle, content: noteContent || null, date: todayDate });
+    if (error) console.error('Error creating note:', error);
+    setNoteTitle("");
+    setNoteContent("");
+    onOpenChange(false);
+    window.location.reload();
+  };
   const [selectedDate, setSelectedDate] = useState<string>(
     new Date().toISOString().split("T")[0],
   );
@@ -460,11 +475,21 @@ export function QuickCreateDialog({
             </form>
           </TabsContent>
           <TabsContent value="note" className="space-y-4" data-oid="l7bi6f1">
-            {/* Assuming a form would be here for note creation */}
-            <form className="space-y-4"> {/* Added form for consistency, can be enhanced later */}
+            <form onSubmit={handleNoteSubmit} className="space-y-4">
               <div className="space-y-2" data-oid="7nye_:v">
-                <Input placeholder="Título de la nota" data-oid="ff52z.y" />
-                <Textarea placeholder="Contenido" rows={5} data-oid="8rkeqdw" />
+                <Input
+                  placeholder="Título de la nota"
+                  value={noteTitle}
+                  onChange={(e) => setNoteTitle(e.target.value)}
+                  data-oid="ff52z.y"
+                />
+                <Textarea
+                  placeholder="Contenido"
+                  rows={5}
+                  value={noteContent}
+                  onChange={(e) => setNoteContent(e.target.value)}
+                  data-oid="8rkeqdw"
+                />
               </div>
               <div className="flex justify-end" data-oid="wo8c_b9">
                 <Button type="submit" data-oid="73re1nh">

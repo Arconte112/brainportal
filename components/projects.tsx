@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, FormEvent } from "react";
+import { supabase } from "@/lib/supabaseClient";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
@@ -20,6 +21,16 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Badge } from "@/components/ui/badge";
+import {
+  Dialog,
+  DialogTrigger,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 
 type Project = {
   id: string;
@@ -30,63 +41,100 @@ type Project = {
 };
 
 export function Projects() {
-  const [projects, setProjects] = useState<Project[]>([
-    {
-      id: "1",
-      name: "Rediseño Web",
-      tasksCount: 12,
-      progress: 75,
-      archived: false,
-    },
-    {
-      id: "2",
-      name: "Campaña Marketing",
-      tasksCount: 8,
-      progress: 30,
-      archived: false,
-    },
-    {
-      id: "3",
-      name: "Desarrollo App",
-      tasksCount: 24,
-      progress: 45,
-      archived: true,
-    },
-    {
-      id: "4",
-      name: "Investigación UX",
-      tasksCount: 6,
-      progress: 90,
-      archived: false,
-    },
-    {
-      id: "5",
-      name: "Proyecto Antiguo",
-      tasksCount: 15,
-      progress: 100,
-      archived: true,
-    },
-  ]);
+  // State for projects enriched with task counts and progress
+  interface RawProject {
+    id: string;
+    name: string;
+    archived: boolean;
+    color?: string | null;
+  }
+  interface RawTask {
+    project_id: string;
+    status: 'pending' | 'done';
+  }
+  interface UIProject extends RawProject {
+    tasksCount: number;
+    progress: number;
+  }
+  const [projects, setProjects] = useState<UIProject[]>([]);
+  const [loading, setLoading] = useState<boolean>(true);
 
   // Estado para controlar si se muestran los proyectos archivados
   const [showArchived, setShowArchived] = useState(false);
+  // Estado para el diálogo de creación de proyecto
+  const [createOpen, setCreateOpen] = useState(false);
+  const [newName, setNewName] = useState<string>("");
+  const [newColor, setNewColor] = useState<string>(() => {
+    // Color por defecto aleatorio
+    const rand = Math.floor(Math.random() * 0xffffff).toString(16).padStart(6, '0');
+    return `#${rand}`;
+  });
 
   // Filtrar proyectos según el estado de showArchived
   const filteredProjects = showArchived
     ? projects
     : projects.filter((project) => !project.archived);
 
-  // Función para archivar/desarchivar un proyecto
-  const toggleArchiveProject = (projectId: string) => {
-    setProjects(
-      projects.map((project) =>
-        project.id === projectId
-          ? { ...project, archived: !project.archived }
-          : project,
-      ),
-    );
+  // Archivar/desarchivar proyecto en Supabase
+  const toggleArchiveProject = async (projectId: string) => {
+    const proj = projects.find((p) => p.id === projectId);
+    if (!proj) return;
+    await supabase
+      .from('projects')
+      .update({ archived: !proj.archived })
+      .eq('id', projectId);
+    fetchData();
   };
 
+  // Crear nuevo proyecto en Supabase
+  const handleCreate = async (e: FormEvent) => {
+    e.preventDefault();
+    if (!newName.trim()) return;
+    await supabase.from('projects').insert({ name: newName.trim(), color: newColor });
+    setNewName('');
+    // Nuevo color
+    const rand = Math.floor(Math.random() * 0xffffff).toString(16).padStart(6, '0');
+    setNewColor(`#${rand}`);
+    setCreateOpen(false);
+    fetchData();
+  };
+
+  // Función para cargar proyectos y tareas desde Supabase
+  const fetchData = async () => {
+    setLoading(true);
+    const { data: prjs, error: prjErr } = await supabase
+      .from<RawProject>('projects')
+      .select('id,name,archived,color');
+    if (prjErr) {
+      console.error('Error fetching projects:', prjErr);
+      setLoading(false);
+      return;
+    }
+    const { data: tks, error: tksErr } = await supabase
+      .from<RawTask>('tasks')
+      .select('project_id,status');
+    if (tksErr) {
+      console.error('Error fetching tasks:', tksErr);
+      setLoading(false);
+      return;
+    }
+    // Enriquecer proyectos con conteo y progreso
+    const enriched: UIProject[] = prjs.map((p) => {
+      const projTasks = tks.filter((t) => t.project_id === p.id);
+      const count = projTasks.length;
+      const done = projTasks.filter((t) => t.status === 'done').length;
+      return {
+        ...p,
+        tasksCount: count,
+        progress: count > 0 ? Math.round((done / count) * 100) : 0,
+      };
+    });
+    setProjects(enriched);
+    setLoading(false);
+  };
+  useEffect(() => {
+    fetchData();
+  }, []);
   return (
     <div className="space-y-6" data-oid="23uv6rf">
       <div className="flex items-center justify-between" data-oid="7-5vfoj">
@@ -118,9 +166,42 @@ export function Projects() {
               <Eye className="h-4 w-4" data-oid="kbkc647" />
             )}
           </Button>
-          <Button size="sm" data-oid="54myu9c">
-            <Plus className="h-4 w-4 mr-1" data-oid="dfnow.7" /> Nuevo Proyecto
-          </Button>
+          <Dialog open={createOpen} onOpenChange={setCreateOpen}>
+            <DialogTrigger asChild>
+              <Button size="sm" data-oid="54myu9c">
+                <Plus className="h-4 w-4 mr-1" data-oid="dfnow.7" /> Nuevo Proyecto
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="bg-card">
+              <DialogHeader>
+                <DialogTitle>Crear Proyecto</DialogTitle>
+              </DialogHeader>
+              <form onSubmit={handleCreate} className="space-y-4 pt-2">
+                <div className="space-y-2">
+                  <Label htmlFor="project-name">Nombre</Label>
+                  <Input
+                    id="project-name"
+                    value={newName}
+                    onChange={(e) => setNewName(e.target.value)}
+                    required
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="project-color">Color</Label>
+                  <input
+                    id="project-color"
+                    type="color"
+                    value={newColor}
+                    onChange={(e) => setNewColor(e.target.value)}
+                    className="h-8 w-12 p-0 border-none"
+                  />
+                </div>
+                <DialogFooter>
+                  <Button type="submit">Crear</Button>
+                </DialogFooter>
+              </form>
+            </DialogContent>
+          </Dialog>
         </div>
       </div>
 
