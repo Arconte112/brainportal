@@ -12,21 +12,47 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
+import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
+import { supabase } from "@/lib/supabaseClient";
 
 type Note = {
   id: string;
   title: string;
   content: string;
-  projectId: string;
+  projectId: string | null;
   date: string;
 };
+
+interface Project {
+  id: string;
+  name: string;
+  color: string;
+}
+
+interface Task {
+  id: string;
+  title: string;
+}
 
 interface NoteDialogProps {
   note: Note;
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onUpdate: (note: Note) => void;
-  onSaveNew: (note: Note) => void;
+  onUpdate: (updated: {
+    id: string;
+    title: string;
+    content: string;
+    date: string;
+    projectId: string | null;
+    taskId: string | null;
+  }) => void;
+  onSaveNew: (updated: {
+    title: string;
+    content: string;
+    date: string;
+    projectId: string | null;
+    taskId: string | null;
+  }) => void;
   isNew: boolean;
 }
 
@@ -40,6 +66,9 @@ export function NoteDialog({
 }: NoteDialogProps) {
   const [editedNote, setEditedNote] = useState<Note>(note);
   const [isEditing, setIsEditing] = useState(isNew);
+  const [projects, setProjects] = useState<Project[]>([]);
+  const [tasks, setTasks] = useState<Task[]>([]);
+  const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
 
   // Update local state when the note prop changes
   useEffect(() => {
@@ -47,11 +76,64 @@ export function NoteDialog({
     setIsEditing(isNew);
   }, [note, isNew]);
 
+  // Fetch projects and tasks lists
+  useEffect(() => {
+    const fetchData = async () => {
+      const { data: projData, error: projError } = await supabase
+        .from<Project>("projects")
+        .select("id,name,color")
+        .order("name", { ascending: true });
+      if (projError) console.error("Error loading projects:", projError);
+      else setProjects(projData || []);
+
+      const { data: taskData, error: taskError } = await supabase
+        .from<Task>("tasks")
+        .select("id,title")
+        .order("title", { ascending: true });
+      if (taskError) console.error("Error loading tasks:", taskError);
+      else setTasks(taskData || []);
+    };
+    fetchData();
+  }, []);
+
+  // Fetch existing task link for existing notes
+  useEffect(() => {
+    if (!open || isNew) return;
+    const fetchLink = async () => {
+      // Use maybeSingle to avoid error when no link exists
+      const { data, error } = await supabase
+        .from("task_note_links")
+        .select("task_id")
+        .eq("note_id", note.id)
+        .maybeSingle();
+      if (error) {
+        console.error("Error loading task link:", error);
+      } else {
+        setSelectedTaskId(data?.task_id || null);
+      }
+    };
+    fetchLink();
+  }, [open, note.id, isNew]);
+
   const handleSave = () => {
+    const payload = {
+      id: editedNote.id,
+      title: editedNote.title,
+      content: editedNote.content,
+      date: editedNote.date,
+      projectId: editedNote.projectId,
+      taskId: selectedTaskId,
+    };
     if (isNew) {
-      onSaveNew(editedNote);
+      onSaveNew({
+        title: payload.title,
+        content: payload.content,
+        date: payload.date,
+        projectId: payload.projectId,
+        taskId: payload.taskId,
+      });
     } else {
-      onUpdate(editedNote);
+      onUpdate(payload);
     }
     setIsEditing(false);
   };
@@ -95,6 +177,51 @@ export function NoteDialog({
                   onChange={(e) => handleChange("date", e.target.value)}
                   data-oid="_c037s1"
                 />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="project">Proyecto</Label>
+                <Select
+                  value={editedNote.projectId ?? "none"}
+                  onValueChange={(v) =>
+                    setEditedNote((prev) => ({
+                      ...prev,
+                      projectId: v === "none" ? null : v,
+                    }))
+                  }
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Sin proyecto" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">Sin proyecto</SelectItem>
+                    {projects.map((p) => (
+                      <SelectItem key={p.id} value={p.id}>
+                        {p.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="task">Tarea</Label>
+                <Select
+                  value={selectedTaskId ?? "none"}
+                  onValueChange={(v) =>
+                    setSelectedTaskId(v === "none" ? null : v)
+                  }
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Sin tarea" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">Sin tarea</SelectItem>
+                    {tasks.map((t) => (
+                      <SelectItem key={t.id} value={t.id}>
+                        {t.title}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
               <div className="space-y-2" data-oid="_b25ocr">
                 <Label htmlFor="content" data-oid="dy868l9">

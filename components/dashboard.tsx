@@ -49,22 +49,16 @@ export function Dashboard() {
       setLoadingTasks(true);
       try {
         const { data, error } = await supabase
-          .from<{
-            id: string;
-            title: string;
-            description: string | null;
-            status: "pending" | "done";
-            priority: "high" | "medium" | "low";
-            due_date: string | null;
-            project_id: string | null;
-          }>("tasks")
-          .select("*")
+          .from("tasks")
+          .select(
+            `id,title,description,status,priority,due_date,project_id,task_note_links(note_id)`
+          )
           .order("created_at", { ascending: true });
         if (error) {
           console.error("Error loading tasks:", error);
         } else if (data) {
           setTasks(
-            data.map((t) => ({
+            data.map((t: any) => ({
               id: t.id,
               title: t.title,
               status: t.status,
@@ -72,8 +66,10 @@ export function Dashboard() {
               dueDate: t.due_date ?? undefined,
               description: t.description ?? undefined,
               projectId: t.project_id ?? undefined,
-              linkedNoteIds: [],
-            })),
+              linkedNoteIds: Array.isArray(t.task_note_links)
+                ? t.task_note_links.map((link: any) => link.note_id)
+                : [],
+            }))
           );
         }
       } finally {
@@ -92,7 +88,7 @@ export function Dashboard() {
         return;
       }
       const { data, error } = await supabase
-        .from<{ id: string; name: string; color?: string }>('projects')
+        .from<"projects", { id: string; name: string; color?: string }>('projects')
         .select('id,name,color');
       if (error) {
         console.error('Error loading projects:', error);
@@ -109,7 +105,7 @@ export function Dashboard() {
   useEffect(() => {
     const loadNotes = async () => {
       const { data, error } = await supabase
-        .from<{
+        .from<"notes", {
           id: string;
           title: string;
           content: string | null;
@@ -228,15 +224,7 @@ export function Dashboard() {
   // Actualiza tarea existente en Supabase y estado local
   const handleUpdateTask = async (updatedTask: Task) => {
     const { data, error } = await supabase
-      .from<{
-        id: string;
-        title: string;
-        description: string | null;
-        status: "pending" | "done";
-        priority: "high" | "medium" | "low";
-        due_date: string | null;
-        project_id: string | null;
-      }>("tasks")
+      .from("tasks")
       .update({
         title: updatedTask.title,
         description: updatedTask.description ?? null,
@@ -251,6 +239,19 @@ export function Dashboard() {
     if (error) {
       console.error("Error updating task:", error);
     } else if (data) {
+      // Actualizar enlaces de notas en la tabla de unión
+      const { error: delError } = await supabase
+        .from('task_note_links')
+        .delete()
+        .eq('task_id', updatedTask.id);
+      if (delError) console.error('Error deleting task-note links:', delError);
+      // Insertar nuevos enlaces
+      for (const noteId of updatedTask.linkedNoteIds || []) {
+        const { error: insError } = await supabase
+          .from('task_note_links')
+          .insert({ task_id: updatedTask.id, note_id: noteId });
+        if (insError) console.error('Error inserting task-note link:', insError);
+      }
       setTasks(
         tasks.map((task) =>
           task.id === data.id
@@ -274,15 +275,7 @@ export function Dashboard() {
   // Crea nueva tarea en Supabase y agrega al estado local
   const handleSaveNewTask = async (newTask: Task) => {
     const { data, error } = await supabase
-      .from<{
-        id: string;
-        title: string;
-        description: string | null;
-        status: "pending" | "done";
-        priority: "high" | "medium" | "low";
-        due_date: string | null;
-        project_id: string | null;
-      }>("tasks")
+      .from("tasks")
       .insert({
         title: newTask.title,
         description: newTask.description ?? null,
@@ -491,7 +484,10 @@ export function Dashboard() {
                     {task.title}
                   </p>
                   {/* Etiqueta de proyecto relacionado */}
-                  {(() => {
+                  {task.projectId && loadingProjects && (
+                    <Skeleton className="h-5 w-16 mb-1" />
+                  )}
+                  {task.projectId && !loadingProjects && (() => {
                     const prj = projects.find((p) => p.id === task.projectId);
                     if (!prj) return null;
                     return (
@@ -588,7 +584,10 @@ export function Dashboard() {
                     {task.title}
                   </p>
                   {/* Etiqueta de proyecto relacionado */}
-                  {(() => {
+                  {task.projectId && loadingProjects && (
+                    <Skeleton className="h-5 w-16 mb-1" />
+                  )}
+                  {task.projectId && !loadingProjects && (() => {
                     const prj = projects.find((p) => p.id === task.projectId);
                     if (!prj) return null;
                     return (

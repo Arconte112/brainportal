@@ -34,9 +34,9 @@ export function AppSidebar() {
       shortcut: "⌘+2",
     },
     {
-      title: "Archivo",
+      title: "Notas",
       icon: Archive,
-      href: "/archive",
+      href: "/notas",
       shortcut: "⌘+3",
     },
     {

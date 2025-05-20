@@ -1,0 +1,43 @@
+# Git
+.git
+.gitignore
+
+# Node modules
+node_modules
+
+# Next.js build output (before our build step)
+.next
+
+# Docker
+Dockerfile
+.dockerignore
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+bun.lockb
+
+# Local environment variables
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# Editor directories and files
+.vscode
+.idea
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# Zip files
+*.zip
+
+# Test files
+coverage

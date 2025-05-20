@@ -1,8 +1,12 @@
 "use client";
 
-import { useState, useEffect, FormEvent } from "react";
+import { useState, FormEvent } from "react"; // useEffect no se necesita para la carga inicial
+import { useRouter } from 'next/navigation'; // Importar useRouter
 import { supabase } from "@/lib/supabaseClient";
 import { Button } from "@/components/ui/button";
+// Importar el tipo UIProject desde la página de proyectos.
+// Idealmente, esto estaría en un archivo de tipos compartido.
+import type { UIProject } from '@/app/projects/page';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Folder,
@@ -38,26 +42,22 @@ type Project = {
   tasksCount: number;
   progress: number;
   archived: boolean;
+  // color?: string | null; // UIProject ya lo incluye si es necesario
 };
 
-export function Projects() {
-  // State for projects enriched with task counts and progress
-  interface RawProject {
-    id: string;
-    name: string;
-    archived: boolean;
-    color?: string | null;
-  }
-  interface RawTask {
-    project_id: string;
-    status: 'pending' | 'done';
-  }
-  interface UIProject extends RawProject {
-    tasksCount: number;
-    progress: number;
-  }
-  const [projects, setProjects] = useState<UIProject[]>([]);
-  const [loading, setLoading] = useState<boolean>(true);
+interface ProjectsProps {
+  initialProjects: UIProject[];
+  "data-oid"?: string; // Para mantener la prop existente si es necesaria
+}
+
+export function Projects({ initialProjects }: ProjectsProps) {
+  const router = useRouter(); // Inicializar router
+  // Los tipos RawProject y RawTask ya no son necesarios aquí si UIProject viene de fuera
+  // y fetchData se elimina o no los usa.
+  // UIProject se importa de @/app/projects/page
+
+  const [projects, setProjects] = useState<UIProject[]>(initialProjects);
+  // const [loading, setLoading] = useState<boolean>(false); // Ya no es necesario para la carga inicial
 
   // Estado para controlar si se muestran los proyectos archivados
   const [showArchived, setShowArchived] = useState(false);
@@ -83,7 +83,8 @@ export function Projects() {
       .from('projects')
       .update({ archived: !proj.archived })
       .eq('id', projectId);
-    fetchData();
+    // fetchData(); // Reemplazar con router.refresh()
+    router.refresh();
   };
 
   // Crear nuevo proyecto en Supabase
@@ -96,47 +97,17 @@ export function Projects() {
     const rand = Math.floor(Math.random() * 0xffffff).toString(16).padStart(6, '0');
     setNewColor(`#${rand}`);
     setCreateOpen(false);
-    fetchData();
+    // fetchData(); // Reemplazar con router.refresh()
+    router.refresh();
   };
 
-  // Función para cargar proyectos y tareas desde Supabase
-  const fetchData = async () => {
-    setLoading(true);
-    const { data: prjs, error: prjErr } = await supabase
-      .from<RawProject>('projects')
-      .select('id,name,archived,color');
-    if (prjErr) {
-      console.error('Error fetching projects:', prjErr);
-      setLoading(false);
-      return;
-    }
-    const { data: tks, error: tksErr } = await supabase
-      .from<RawTask>('tasks')
-      .select('project_id,status');
-    if (tksErr) {
-      console.error('Error fetching tasks:', tksErr);
-      setLoading(false);
-      return;
-    }
-    // Enriquecer proyectos con conteo y progreso
-    const enriched: UIProject[] = prjs.map((p) => {
-      const projTasks = tks.filter((t) => t.project_id === p.id);
-      const count = projTasks.length;
-      const done = projTasks.filter((t) => t.status === 'done').length;
-      return {
-        ...p,
-        tasksCount: count,
-        progress: count > 0 ? Math.round((done / count) * 100) : 0,
-      };
-    });
-    setProjects(enriched);
-    setLoading(false);
-  };
-  useEffect(() => {
-    fetchData();
-  }, []);
+  // La función fetchData y el useEffect para la carga inicial ya no son necesarios aquí.
+  // useEffect(() => {
+  //   fetchData();
+  // }, []);
+
   return (
-    <div className="space-y-6" data-oid="23uv6rf">
+    <div className="space-y-6" data-oid="23uv6rf"> {/* Mantener data-oid si es necesario */}
       <div className="flex items-center justify-between" data-oid="7-5vfoj">
         <h1 className="text-2xl font-bold" data-oid="lqdpz:0">
           Proyectos

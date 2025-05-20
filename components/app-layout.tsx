@@ -27,6 +27,7 @@ import {
   SelectItem,
 } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
+import { Skeleton } from "@/components/ui/skeleton";
 
 
 // Tipo de evento para la lista de Eventos de hoy y Próximos eventos
@@ -48,6 +49,8 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
   const [chatOpen, setChatOpen] = useState(false);
   const [todayEvents, setTodayEvents] = useState<EventItem[]>([]);
   const [upcomingEvents, setUpcomingEvents] = useState<EventItem[]>([]);
+  const [loadingTodayEvents, setLoadingTodayEvents] = useState(true);
+  const [loadingUpcomingEvents, setLoadingUpcomingEvents] = useState(true);
   const [selectedEvent, setSelectedEvent] = useState<FullEventItem | null>(
     null
   );
@@ -77,25 +80,30 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
 
   // Cargar eventos para la fecha seleccionada
   const loadTodayEvents = async () => {
-    if (!selectedDate) {
-      setTodayEvents([]); // Clear events if no date is selected
-      return;
+    setLoadingTodayEvents(true);
+    try {
+      if (!selectedDate) {
+        setTodayEvents([]); // Clear events if no date is selected
+        return;
+      }
+      // Calcular ventana UTC que cubre el día local seleccionado,
+      // ajustando por la zona horaria para incluir eventos almacenados en UTC
+      const [year, month, day] = selectedDate.split('-').map(Number);
+      const localStart = new Date(year, month - 1, day, 0, 0, 0, 0);
+      const offsetMs = localStart.getTimezoneOffset() * 60000;
+      const utcStart = new Date(localStart.getTime() - offsetMs).toISOString();
+      const utcEnd = new Date(localStart.getTime() + 24 * 60 * 60 * 1000 - offsetMs).toISOString();
+      const { data: todayData, error } = await supabase
+        .from("events")
+        .select("id, title, start_time, end_time, priority")
+        .gte("start_time", utcStart)
+        .lt("start_time", utcEnd)
+        .order("start_time", { ascending: true });
+      if (error) console.error("Error loading today events:", error);
+      else setTodayEvents(todayData ?? []);
+    } finally {
+      setLoadingTodayEvents(false);
     }
-    // Calcular ventana UTC que cubre el día local seleccionado,
-    // ajustando por la zona horaria para incluir eventos almacenados en UTC
-    const [year, month, day] = selectedDate.split('-').map(Number);
-    const localStart = new Date(year, month - 1, day, 0, 0, 0, 0);
-    const offsetMs = localStart.getTimezoneOffset() * 60000;
-    const utcStart = new Date(localStart.getTime() - offsetMs).toISOString();
-    const utcEnd = new Date(localStart.getTime() + 24 * 60 * 60 * 1000 - offsetMs).toISOString();
-    const { data: todayData, error } = await supabase
-      .from("events")
-      .select("id, title, start_time, end_time, priority")
-      .gte("start_time", utcStart)
-      .lt("start_time", utcEnd)
-      .order("start_time", { ascending: true });
-    if (error) console.error("Error loading today events:", error);
-    else setTodayEvents(todayData ?? []);
   };
 
   useEffect(() => {
@@ -104,15 +112,20 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
 
   // Cargar próximos eventos
   const loadUpcomingEvents = async () => {
-    const now = new Date();
-    const { data: upcomingData, error } = await supabase
-      .from("events")
-      .select("id, title, start_time, end_time, priority")
-      .gt("start_time", now.toISOString())
-      .order("start_time", { ascending: true })
-      .limit(5);
-    if (error) console.error("Error loading upcoming events:", error);
-    else setUpcomingEvents(upcomingData ?? []);
+    setLoadingUpcomingEvents(true);
+    try {
+      const now = new Date();
+      const { data: upcomingData, error } = await supabase
+        .from("events")
+        .select("id, title, start_time, end_time, priority")
+        .gt("start_time", now.toISOString())
+        .order("start_time", { ascending: true })
+        .limit(5);
+      if (error) console.error("Error loading upcoming events:", error);
+      else setUpcomingEvents(upcomingData ?? []);
+    } finally {
+      setLoadingUpcomingEvents(false);
+    }
   };
 
   useEffect(() => {
@@ -235,7 +248,17 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
                     className="space-y-3 max-h-[400px] overflow-y-auto"
                     data-oid="2t318:r"
                   >
-                    {todayEvents.length > 0 ? (
+                    {loadingTodayEvents ? (
+                      [...Array(3)].map((_, i) => (
+                        <div key={i} className="flex items-center gap-2 p-2">
+                          <Skeleton className="w-2 h-2 rounded-full" />
+                          <div className="flex-1 space-y-1">
+                            <Skeleton className="h-4 w-3/4" />
+                            <Skeleton className="h-3 w-1/2" />
+                          </div>
+                        </div>
+                      ))
+                    ) : todayEvents.length > 0 ? (
                       todayEvents.map((event) => {
                         const start = new Date(event.start_time);
                         const end = new Date(event.end_time);
@@ -300,7 +323,17 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
                     className="space-y-3 max-h-[400px] overflow-y-auto"
                     data-oid="l:zq_cw"
                   >
-                    {upcomingEvents.length > 0 ? (
+                    {loadingUpcomingEvents ? (
+                      [...Array(3)].map((_, i) => (
+                        <div key={i} className="flex items-center gap-2 p-2">
+                          <Skeleton className="w-2 h-2 rounded-full" />
+                          <div className="flex-1 space-y-1">
+                            <Skeleton className="h-4 w-3/4" />
+                            <Skeleton className="h-3 w-1/2" />
+                          </div>
+                        </div>
+                      ))
+                    ) : upcomingEvents.length > 0 ? (
                       upcomingEvents.map((event) => {
                         const start = new Date(event.start_time);
                         const end = new Date(event.end_time);

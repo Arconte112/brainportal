@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { ChevronLeft, ChevronRight } from "lucide-react";
+import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 import { supabase } from "@/lib/supabaseClient";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogClose } from "@/components/ui/dialog";
@@ -27,6 +28,8 @@ export function Calendar() {
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
   const [tasks, setTasks] = useState<CalendarTask[]>([]);
   const [monthlyTasks, setMonthlyTasks] = useState<CalendarTaskMonthly[]>([]);
+  const [isLoadingMonthData, setIsLoadingMonthData] = useState(true);
+  const [isLoadingDayTasks, setIsLoadingDayTasks] = useState(false);
 
   const getDaysInMonth = (year: number, month: number) => {
     return new Date(year, month + 1, 0).getDate();
@@ -56,51 +59,102 @@ export function Calendar() {
   // Al hacer click en un día, cargar tareas y mostrar modal
   const handleDayClick = async (day: number) => {
     const date = new Date(year, month, day);
-    const dateStr = date.toISOString().substring(0, 10);
-    const { data: tasksData, error: tasksError } = await supabase
-      .from("tasks")
-      .select("id, title, status, priority")
-      .eq("due_date", dateStr)
-      .order("due_date", { ascending: true });
-    if (tasksError) console.error("Error loading tasks:", tasksError);
-    else setTasks(tasksData ?? []);
     setSelectedDate(date);
+    setIsLoadingDayTasks(true);
+    const dateStr = date.toISOString().substring(0, 10);
+    try {
+      const { data: tasksData, error: tasksError } = await supabase
+        .from("tasks")
+        .select("id, title, status, priority")
+        .eq("due_date", dateStr)
+        .order("due_date", { ascending: true });
+      if (tasksError) {
+        console.error("Error loading tasks:", tasksError);
+        setTasks([]);
+      } else {
+        setTasks(tasksData ?? []);
+      }
+    } catch (error) {
+      console.error("Error in handleDayClick:", error);
+      setTasks([]);
+    } finally {
+      setIsLoadingDayTasks(false);
+    }
   };
 
   // Cargar eventos y tareas desde Supabase para el mes actual
   useEffect(() => {
-    const loadEventsForMonth = async () => {
+    const loadDataForMonth = async () => {
+      setIsLoadingMonthData(true);
+      const cacheKey = `calendarData-${year}-${month}`;
+      const cachedDataString = sessionStorage.getItem(cacheKey);
+
+      if (cachedDataString) {
+        try {
+          const cachedData = JSON.parse(cachedDataString);
+          // Optional: Add a timestamp and check for staleness if needed
+          // For now, if it's in session storage for this month/year, use it.
+          setEvents(cachedData.events);
+          setMonthlyTasks(cachedData.monthlyTasks);
+          setIsLoadingMonthData(false);
+          return;
+        } catch (e) {
+          console.error("Error parsing cached calendar data", e);
+          sessionStorage.removeItem(cacheKey); // Clear corrupted cache
+        }
+      }
+
       const startOfMonth = new Date(year, month, 1);
       startOfMonth.setHours(0, 0, 0, 0);
       const endOfMonth = new Date(year, month + 1, 1);
-      endOfMonth.setHours(0, 0, 0, 0);
-      const { data, error } = await supabase
-        .from("events")
-        .select("id, title, start_time, end_time, priority")
-        .gte("start_time", startOfMonth.toISOString())
-        .lt("start_time", endOfMonth.toISOString())
-        .order("start_time", { ascending: true });
-      if (error) console.error("Error loading calendar events:", error);
-      else setEvents(data ?? []);
-    };
+      endOfMonth.setHours(0, 0, 0, 0); // This will be the first moment of the next month
 
-    const loadTasksForMonth = async () => {
-      const startDate = new Date(year, month, 1);
-      const endDate = new Date(year, month + 1, 1);
-      const startStr = `${startDate.getFullYear()}-${String(startDate.getMonth() + 1).padStart(2, '0')}-${String(startDate.getDate()).padStart(2, '0')}`;
-      const endStr = `${endDate.getFullYear()}-${String(endDate.getMonth() + 1).padStart(2, '0')}-${String(endDate.getDate()).padStart(2, '0')}`;
-      const { data: tasksData, error: tasksError } = await supabase
-        .from("tasks")
-        .select("id, title, status, priority, due_date")
-        .gte("due_date", startStr)
-        .lt("due_date", endStr)
-        .order("due_date", { ascending: true });
-      if (tasksError) console.error("Error loading calendar tasks:", tasksError);
-      else setMonthlyTasks(tasksData ?? []);
-    };
+      try {
+        const [eventsResponse, tasksResponse] = await Promise.all([
+          supabase
+            .from("events")
+            .select("id, title, start_time, end_time, priority")
+            .gte("start_time", startOfMonth.toISOString())
+            .lt("start_time", endOfMonth.toISOString())
+            .order("start_time", { ascending: true }),
+          supabase
+            .from("tasks")
+            .select("id, title, status, priority, due_date")
+            .gte("due_date", `${year}-${String(month + 1).padStart(2, '0')}-01`)
+            .lt("due_date", `${year}-${String(month + 2).padStart(2, '0')}-01`) // Correctly targets tasks up to the end of the current month
+            .order("due_date", { ascending: true })
+        ]);
 
-    loadEventsForMonth();
-    loadTasksForMonth();
+        const newEvents = eventsResponse.data ?? [];
+        const newMonthlyTasks = tasksResponse.data ?? [];
+
+        if (eventsResponse.error) {
+          console.error("Error loading calendar events:", eventsResponse.error);
+          setEvents([]);
+        } else {
+          setEvents(newEvents);
+        }
+
+        if (tasksResponse.error) {
+          console.error("Error loading calendar tasks:", tasksResponse.error);
+          setMonthlyTasks([]);
+        } else {
+          setMonthlyTasks(newMonthlyTasks);
+        }
+        
+        // Cache the new data
+        sessionStorage.setItem(cacheKey, JSON.stringify({ events: newEvents, monthlyTasks: newMonthlyTasks }));
+
+      } catch (error) {
+        console.error("Error loading month data:", error);
+        setEvents([]);
+        setMonthlyTasks([]);
+      } finally {
+        setIsLoadingMonthData(false);
+      }
+    };
+    
+    loadDataForMonth();
   }, [year, month]);
 
   // Adjust for Sunday as first day (0) to Monday as first day (1)
@@ -184,51 +238,57 @@ export function Calendar() {
           </div>
         ))}
 
-        {days.map((day, index) => (
-          <div
-            key={index}
-            className={cn(
-              "border border-border rounded-md min-h-24 p-1 relative",
-              day === null ? "bg-transparent" : "hover:bg-secondary/20 cursor-pointer",
-            )}
-            data-oid=".y6p074"
-            onClick={() => day !== null && handleDayClick(day)}
-          >
-            {day !== null && (
-              <>
-                <div
-                  className={cn(
-                    "text-sm font-medium h-6 w-6 flex items-center justify-center rounded-full",
-                    isToday(day) ? "bg-white text-black" : "",
-                  )}
-                  data-oid=":.:-.du"
-                >
-                  {day}
-                </div>
-                <div className="mt-1 space-y-1" data-oid="hvh:eul">
-                  {getEventsForDay(day).map((event) => (
-                    <div
-                      key={event.id}
-                      className="text-xs p-1 border-l-2 border-white bg-secondary/30 rounded-sm truncate"
-                      title={`${event.title} - ${new Date(event.start_time).toLocaleTimeString('es-ES', {hour: '2-digit', minute: '2-digit'})}`}
-                      data-oid="_yqc50j"
-                    >
-                      <span className="font-medium" data-oid="d.2xihp">
-                        {new Date(event.start_time).toLocaleTimeString('es-ES', {hour: '2-digit', minute: '2-digit'})}
-                      </span>{" "}
-                      {event.title}
-                    </div>
-                  ))}
-                </div>
-                {getTasksCountForDay(day) > 0 && (
-                  <Badge className="absolute bottom-1 right-1">
-                    {getTasksCountForDay(day)}
-                  </Badge>
+        {isLoadingMonthData
+          ? Array.from({ length: 35 }).map((_, i) => (
+              <Skeleton key={`skel-day-${i}`} className="h-24 w-full rounded-md" data-oid="s1k2e3l4e5t6o7n8"/>
+            ))
+          : days.map((day, index) => (
+              <div
+                key={index}
+                className={cn(
+                  "border border-border rounded-md min-h-24 p-1 relative",
+                  day === null
+                    ? "bg-transparent"
+                    : "hover:bg-secondary/20 cursor-pointer",
                 )}
-              </>
-            )}
-          </div>
-        ))}
+                data-oid=".y6p074"
+                onClick={() => day !== null && handleDayClick(day)}
+              >
+                {day !== null && (
+                  <>
+                    <div
+                      className={cn(
+                        "text-sm font-medium h-6 w-6 flex items-center justify-center rounded-full",
+                        isToday(day) ? "bg-white text-black" : "",
+                      )}
+                      data-oid=":.:-.du"
+                    >
+                      {day}
+                    </div>
+                    <div className="mt-1 space-y-1" data-oid="hvh:eul">
+                      {getEventsForDay(day).map((event) => (
+                        <div
+                          key={event.id}
+                          className="text-xs p-1 border-l-2 border-white bg-secondary/30 rounded-sm truncate"
+                          title={`${event.title} - ${new Date(event.start_time).toLocaleTimeString('es-ES', {hour: '2-digit', minute: '2-digit'})}`}
+                          data-oid="_yqc50j"
+                        >
+                          <span className="font-medium" data-oid="d.2xihp">
+                            {new Date(event.start_time).toLocaleTimeString('es-ES', {hour: '2-digit', minute: '2-digit'})}
+                          </span>{" "}
+                          {event.title}
+                        </div>
+                      ))}
+                    </div>
+                    {getTasksCountForDay(day) > 0 && (
+                      <Badge className="absolute bottom-1 right-1">
+                        {getTasksCountForDay(day)}
+                      </Badge>
+                    )}
+                  </>
+                )}
+              </div>
+            ))}
       </div>
     </div>
     <Dialog
@@ -256,7 +316,13 @@ export function Calendar() {
           </div>
           <div>
             <h3 className="text-lg font-medium mb-2">Tareas</h3>
-            {tasks.length > 0 ? (
+            {isLoadingDayTasks ? (
+              <div className="space-y-2" data-oid="l0a1d2i3n4g5">
+                <Skeleton className="h-4 w-3/4" />
+                <Skeleton className="h-4 w-1/2" />
+                <Skeleton className="h-4 w-2/3" />
+              </div>
+            ) : tasks.length > 0 ? (
               tasks.map((task) => <div key={task.id} className="text-sm mb-1">{task.title}</div>)
             ) : (
               <p className="text-xs text-muted-foreground">No hay tareas</p>
