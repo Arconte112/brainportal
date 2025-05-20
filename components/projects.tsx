@@ -1,7 +1,6 @@
 "use client";
 
-import { useState, FormEvent } from "react"; // useEffect no se necesita para la carga inicial
-import { useRouter } from 'next/navigation'; // Importar useRouter
+import { useState, FormEvent } from "react";
 import { supabase } from "@/lib/supabaseClient";
 import { Button } from "@/components/ui/button";
 // Importar el tipo UIProject desde la página de proyectos.
@@ -51,7 +50,6 @@ interface ProjectsProps {
 }
 
 export function Projects({ initialProjects }: ProjectsProps) {
-  const router = useRouter(); // Inicializar router
   // Los tipos RawProject y RawTask ya no son necesarios aquí si UIProject viene de fuera
   // y fetchData se elimina o no los usa.
   // UIProject se importa de @/app/projects/page
@@ -79,26 +77,47 @@ export function Projects({ initialProjects }: ProjectsProps) {
   const toggleArchiveProject = async (projectId: string) => {
     const proj = projects.find((p) => p.id === projectId);
     if (!proj) return;
-    await supabase
+    const { data: updated, error } = await supabase
       .from('projects')
       .update({ archived: !proj.archived })
-      .eq('id', projectId);
-    // fetchData(); // Reemplazar con router.refresh()
-    router.refresh();
+      .eq('id', projectId)
+      .select('archived')
+      .single();
+    if (error) {
+      console.error('Error updating project:', error);
+      return;
+    }
+    setProjects((prev) =>
+      prev.map((p) =>
+        p.id === projectId ? { ...p, archived: updated.archived } : p
+      )
+    );
   };
 
   // Crear nuevo proyecto en Supabase
   const handleCreate = async (e: FormEvent) => {
     e.preventDefault();
     if (!newName.trim()) return;
-    await supabase.from('projects').insert({ name: newName.trim(), color: newColor });
+    const { data: insertedProject, error } = await supabase
+      .from('projects')
+      .insert({ name: newName.trim(), color: newColor })
+      .select('id,name,archived,color')
+      .single();
+    if (error || !insertedProject) {
+      console.error('Error creating project:', error);
+      return;
+    }
+    const newProj: UIProject = {
+      ...insertedProject,
+      tasksCount: 0,
+      progress: 0,
+    };
+    setProjects((prev) => [newProj, ...prev]);
     setNewName('');
     // Nuevo color
     const rand = Math.floor(Math.random() * 0xffffff).toString(16).padStart(6, '0');
     setNewColor(`#${rand}`);
     setCreateOpen(false);
-    // fetchData(); // Reemplazar con router.refresh()
-    router.refresh();
   };
 
   // La función fetchData y el useEffect para la carga inicial ya no son necesarios aquí.
