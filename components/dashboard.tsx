@@ -2,8 +2,9 @@
 
 import type React from "react";
 
-import { useState, useEffect } from "react";
+import { useState, useCallback } from "react";
 import { useSelectedDate } from "@/hooks/use-selected-date";
+import { useData } from "@/hooks/data-provider";
 import { supabase } from "@/lib/supabaseClient";
 import { Progress } from "@/components/ui/progress";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -15,120 +16,21 @@ import { Badge } from "@/components/ui/badge";
 import { toast } from "@/components/ui/use-toast";
 import { ToastAction } from "@/components/ui/toast";
 
-export type Task = {
-  id: string;
-  title: string;
-  status: "pending" | "done";
-  priority: "high" | "medium" | "low";
-  dueDate?: string;
-  description?: string;
-  projectId?: string;
-  linkedNoteIds?: string[]; // Array de IDs de notas relacionadas
-};
-
-// Tipo para las notas
-export type Note = {
-  id: string;
-  title: string;
-  content: string;
-  projectId: string;
-  date: string;
-};
-// Cache for static project list
-let projectsCache: { id: string; name: string; color?: string }[] | null = null;
-
-// Notas cargadas desde la base de datos
+import type { Task, Note } from '@/types';
 
 export function Dashboard() {
-  const [tasks, setTasks] = useState<Task[]>([]);
-  const [projects, setProjects] = useState<{ id: string; name: string; color?: string }[]>([]);
-  const [loadingTasks, setLoadingTasks] = useState(true);
-  const [loadingProjects, setLoadingProjects] = useState(true);
-  useEffect(() => {
-    const loadTasks = async () => {
-      setLoadingTasks(true);
-      try {
-        const { data, error } = await supabase
-          .from("tasks")
-          .select(
-            `id,title,description,status,priority,due_date,project_id,task_note_links(note_id)`
-          )
-          .order("created_at", { ascending: true });
-        if (error) {
-          console.error("Error loading tasks:", error);
-        } else if (data) {
-          setTasks(
-            data.map((t: any) => ({
-              id: t.id,
-              title: t.title,
-              status: t.status,
-              priority: t.priority,
-              dueDate: t.due_date ?? undefined,
-              description: t.description ?? undefined,
-              projectId: t.project_id ?? undefined,
-              linkedNoteIds: Array.isArray(t.task_note_links)
-                ? t.task_note_links.map((link: any) => link.note_id)
-                : [],
-            }))
-          );
-        }
-      } finally {
-        setLoadingTasks(false);
-      }
-    };
-    loadTasks();
-  }, []);
-  // Cargar lista de proyectos para etiquetas
-  useEffect(() => {
-    const loadProjects = async () => {
-      setLoadingProjects(true);
-      if (projectsCache) {
-        setProjects(projectsCache);
-        setLoadingProjects(false);
-        return;
-      }
-      const { data, error } = await supabase
-        .from<"projects", { id: string; name: string; color?: string }>('projects')
-        .select('id,name,color');
-      if (error) {
-        console.error('Error loading projects:', error);
-      } else {
-        const prjData = data ?? [];
-        setProjects(prjData);
-        projectsCache = prjData;
-      }
-      setLoadingProjects(false);
-    };
-    loadProjects();
-  }, []);
-  // Cargar notas reales desde la base de datos
-  useEffect(() => {
-    const loadNotes = async () => {
-      const { data, error } = await supabase
-        .from<"notes", {
-          id: string;
-          title: string;
-          content: string | null;
-          project_id: string | null;
-          date: string;
-        }>('notes')
-        .select('id,title,content,project_id,date');
-      if (error) console.error('Error loading notes:', error);
-      else
-        setNotes(
-          (data ?? []).map((n) => ({
-            id: n.id,
-            title: n.title,
-            content: n.content ?? undefined,
-            projectId: n.project_id ?? undefined,
-            date: n.date,
-          })),
-        );
-    };
-    loadNotes();
-  }, []);
+  const {
+    tasks,
+    projects,
+    notes,
+    loadingTasks,
+    loadingProjects,
+    updateTaskOptimistic,
+    addTaskOptimistic,
+    updateNoteOptimistic,
+    addNoteOptimistic
+  } = useData();
 
-  const [notes, setNotes] = useState<Note[]>([]);
   // Día seleccionado en el calendario semanal (YYYY-MM-DD)
   const { selectedDate, setSelectedDate } = useSelectedDate();
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
@@ -152,9 +54,9 @@ export function Dashboard() {
     // Ordenar tareas pendientes por prioridad y fecha de vencimiento
     const sortedTasks = [...pendingTasks].sort((a, b) => {
       // Primero por prioridad
-      const priorityOrder = { high: 0, medium: 1, low: 2 };
+      const priorityOrder: Record<'high' | 'medium' | 'low', number> = { high: 0, medium: 1, low: 2 };
       const priorityDiff =
-        priorityOrder[a.priority] - priorityOrder[b.priority];
+        priorityOrder[a.priority as 'high' | 'medium' | 'low'] - priorityOrder[b.priority as 'high' | 'medium' | 'low'];
       if (priorityDiff !== 0) return priorityDiff;
 
       // Luego por fecha de vencimiento (si existe)
@@ -181,24 +83,67 @@ export function Dashboard() {
     e.preventDefault();
   };
 
-  const handleDrop = (e: React.DragEvent, targetStatus: "pending" | "done") => {
+  const handleDrop = useCallback(async (e: React.DragEvent, targetStatus: "pending" | "done") => {
     e.preventDefault();
     const taskId = e.dataTransfer.getData("taskId");
+    
+    const taskToUpdate = tasks.find(task => task.id === taskId);
+    if (!taskToUpdate) return;
 
-    setTasks(
-      tasks.map((task) =>
-        task.id === taskId ? { ...task, status: targetStatus } : task,
-      ),
-    );
-  };
+    // Optimistic update - update UI immediately
+    updateTaskOptimistic(taskId, { status: targetStatus });
 
-  const markTaskDone = (taskId: string) => {
-    setTasks(
-      tasks.map((task) =>
-        task.id === taskId ? { ...task, status: "done" } : task,
-      ),
-    );
-  };
+    // Persist to database
+    try {
+      const { error } = await supabase
+        .from('tasks')
+        .update({ status: targetStatus })
+        .eq('id', taskId);
+      
+      if (error) {
+        console.error('Error updating task status:', error);
+        // Revert optimistic update on error
+        updateTaskOptimistic(taskId, { status: taskToUpdate.status });
+        toast({
+          title: "Error",
+          description: "No se pudo actualizar el estado de la tarea",
+          variant: "destructive"
+        });
+      } else {
+        toast({
+          title: targetStatus === 'done' ? "¡Tarea completada!" : "Tarea pendiente",
+          description: `"${taskToUpdate.title}" se movió a ${targetStatus === 'done' ? 'Hecho' : 'Pendiente'}`,
+        });
+      }
+    } catch (error) {
+      console.error('Error updating task:', error);
+      // Revert on error
+      updateTaskOptimistic(taskId, { status: taskToUpdate.status });
+    }
+  }, [tasks, updateTaskOptimistic]);
+
+  const markTaskDone = useCallback(async (taskId: string) => {
+    const taskToUpdate = tasks.find(task => task.id === taskId);
+    if (!taskToUpdate) return;
+
+    // Optimistic update
+    updateTaskOptimistic(taskId, { status: "done" });
+
+    try {
+      const { error } = await supabase
+        .from('tasks')
+        .update({ status: 'done' })
+        .eq('id', taskId);
+      
+      if (error) {
+        console.error('Error marking task as done:', error);
+        // Revert on error
+        updateTaskOptimistic(taskId, { status: "pending" });
+      }
+    } catch (error) {
+      console.error('Error updating task:', error);
+    }
+  }, [tasks, updateTaskOptimistic]);
 
   const handleTaskClick = (task: Task) => {
     setSelectedTask(task);
@@ -221,151 +166,184 @@ export function Dashboard() {
     setTaskDialogOpen(true);
   };
 
-  // Actualiza tarea existente en Supabase y estado local
-  const handleUpdateTask = async (updatedTask: Task) => {
-    const { data, error } = await supabase
-      .from("tasks")
-      .update({
-        title: updatedTask.title,
-        description: updatedTask.description ?? null,
-        status: updatedTask.status,
-        priority: updatedTask.priority,
-        due_date: updatedTask.dueDate ?? null,
-        project_id: updatedTask.projectId ?? null,
-      })
-      .eq("id", updatedTask.id)
-      .select("*")
-      .single();
-    if (error) {
-      console.error("Error updating task:", error);
-    } else if (data) {
-      // Actualizar enlaces de notas en la tabla de unión
-      const { error: delError } = await supabase
-        .from('task_note_links')
-        .delete()
-        .eq('task_id', updatedTask.id);
-      if (delError) console.error('Error deleting task-note links:', delError);
-      // Insertar nuevos enlaces
-      for (const noteId of updatedTask.linkedNoteIds || []) {
-        const { error: insError } = await supabase
-          .from('task_note_links')
-          .insert({ task_id: updatedTask.id, note_id: noteId });
-        if (insError) console.error('Error inserting task-note link:', insError);
-      }
-      setTasks(
-        tasks.map((task) =>
-          task.id === data.id
-            ? {
-                id: data.id,
-                title: data.title,
-                status: data.status,
-                priority: data.priority,
-                dueDate: data.due_date ?? undefined,
-                description: data.description ?? undefined,
-                projectId: data.project_id ?? undefined,
-                linkedNoteIds: updatedTask.linkedNoteIds,
-              }
-            : task,
-        ),
-      );
-    }
+  // Optimized task update with real-time sync
+  const handleUpdateTask = useCallback(async (updatedTask: Task) => {
+    // Optimistic update
+    updateTaskOptimistic(updatedTask.id, updatedTask);
     setTaskDialogOpen(false);
-  };
 
-  // Crea nueva tarea en Supabase y agrega al estado local
-  const handleSaveNewTask = async (newTask: Task) => {
-    const { data, error } = await supabase
-      .from("tasks")
-      .insert({
-        title: newTask.title,
-        description: newTask.description ?? null,
-        status: newTask.status,
-        priority: newTask.priority,
-        due_date: newTask.dueDate ?? null,
-        project_id: newTask.projectId ?? null,
-      })
-      .select("*")
-      .single();
-    if (error) {
-      console.error("Error creating task:", error);
-    } else if (data) {
-      setTasks([
-        ...tasks,
-        {
-          id: data.id,
-          title: data.title,
-          status: data.status,
-          priority: data.priority,
-          dueDate: data.due_date ?? undefined,
-          description: data.description ?? undefined,
-          projectId: data.project_id ?? undefined,
-          linkedNoteIds: [],
-        },
-      ]);
+    try {
+      const { data, error } = await supabase
+        .from("tasks")
+        .update({
+          title: updatedTask.title,
+          description: updatedTask.description ?? null,
+          status: updatedTask.status,
+          priority: updatedTask.priority,
+          due_date: updatedTask.dueDate ?? null,
+          project_id: updatedTask.projectId ?? null,
+        })
+        .eq("id", updatedTask.id)
+        .select("*")
+        .single();
+      
+      if (error) {
+        console.error("Error updating task:", error);
+        toast({
+          title: "Error",
+          description: "No se pudo actualizar la tarea",
+          variant: "destructive"
+        });
+        return;
+      }
+
+      // Update note links
+      if (updatedTask.linkedNoteIds) {
+        // Delete existing links
+        await supabase
+          .from('task_note_links')
+          .delete()
+          .eq('task_id', updatedTask.id);
+        
+        // Insert new links
+        if (updatedTask.linkedNoteIds.length > 0) {
+          const links = updatedTask.linkedNoteIds.map(noteId => ({
+            task_id: updatedTask.id,
+            note_id: noteId
+          }));
+          
+          await supabase
+            .from('task_note_links')
+            .insert(links);
+        }
+      }
+
+      toast({
+        title: "Tarea actualizada",
+        description: `"${updatedTask.title}" se actualizó correctamente`,
+      });
+    } catch (error) {
+      console.error("Error updating task:", error);
+      toast({
+        title: "Error",
+        description: "Error inesperado al actualizar la tarea",
+        variant: "destructive"
+      });
     }
+  }, [updateTaskOptimistic]);
+
+  // Optimized task creation
+  const handleSaveNewTask = useCallback(async (newTask: Task) => {
     setTaskDialogOpen(false);
-  };
+    
+    try {
+      const { data, error } = await supabase
+        .from("tasks")
+        .insert({
+          title: newTask.title,
+          description: newTask.description ?? null,
+          status: newTask.status,
+          priority: newTask.priority,
+          due_date: newTask.dueDate ?? null,
+          project_id: newTask.projectId ?? null,
+        })
+        .select("*")
+        .single();
+      
+      if (error) {
+        console.error("Error creating task:", error);
+        toast({
+          title: "Error",
+          description: "No se pudo crear la tarea",
+          variant: "destructive"
+        });
+        return;
+      }
+
+      // Add note links if any
+      if (newTask.linkedNoteIds && newTask.linkedNoteIds.length > 0) {
+        const links = newTask.linkedNoteIds.map(noteId => ({
+          task_id: data.id,
+          note_id: noteId
+        }));
+        
+        await supabase
+          .from('task_note_links')
+          .insert(links);
+      }
+
+      // Optimistic update happens via real-time subscription
+      toast({
+        title: "Tarea creada",
+        description: `"${newTask.title}" se creó correctamente`,
+      });
+    } catch (error) {
+      console.error("Error creating task:", error);
+      toast({
+        title: "Error",
+        description: "Error inesperado al crear la tarea",
+        variant: "destructive"
+      });
+    }
+  }, []);
 
   // Nueva función para actualizar notas
-  const handleUpdateNote = (updatedNote: Note) => {
-    setNotes(
-      notes.map((note) => (note.id === updatedNote.id ? updatedNote : note)),
-    );
+  const handleUpdateNote = useCallback((updatedNote: Note) => {
+    updateNoteOptimistic(updatedNote.id, updatedNote);
     toast({
       title: "Nota actualizada",
       description: `La nota "${updatedNote.title}" ha sido actualizada correctamente.`,
     });
-  };
+  }, [updateNoteOptimistic]);
 
   // Función para quitar la fecha de una tarea (actualiza en Supabase)
-  const removeDueDate = async (e: React.MouseEvent, taskId: string) => {
+  const removeDueDate = useCallback(async (e: React.MouseEvent, taskId: string) => {
     e.stopPropagation(); // Evitar que se abra el diálogo de tarea
 
     // Encontrar la tarea para mostrar su título en la notificación
     const taskToUpdate = tasks.find((task) => task.id === taskId);
+    if (!taskToUpdate) return;
+
+    // Optimistic update
+    updateTaskOptimistic(taskId, { dueDate: undefined });
 
     // Actualizar la fecha en la base de datos
     const { error: removeError } = await supabase
       .from('tasks')
       .update({ due_date: null })
       .eq('id', taskId);
+    
     if (removeError) {
       console.error('Error removing due date:', removeError);
+      // Revert optimistic update
+      updateTaskOptimistic(taskId, { dueDate: taskToUpdate.dueDate });
       toast({ title: 'Error', description: 'No se pudo quitar la fecha de la tarea.' });
       return;
     }
-    // Actualizar estado local
-    setTasks(
-      tasks.map((task) =>
-        task.id === taskId ? { ...task, dueDate: undefined } : task,
-      ),
-    );
 
     // Mostrar notificación con opción para deshacer
-    if (taskToUpdate) {
-      toast({
-        title: "Fecha eliminada",
-        description: `Se ha quitado la fecha de la tarea "${taskToUpdate.title}"`,
-        action: (
-          <ToastAction
-            altText="Deshacer"
-            onClick={() => {
-              setTasks(
-                tasks.map((task) =>
-                  task.id === taskId
-                    ? { ...task } // Mantener la tarea original
-                    : task,
-                ),
-              );
-            }}
-            data-oid="jtvdw2d"
-          >
-            Deshacer
-          </ToastAction>
-        ),
-      });
-    }
-  };
+    toast({
+      title: "Fecha eliminada",
+      description: `Se ha quitado la fecha de la tarea "${taskToUpdate.title}"`,
+      action: (
+        <ToastAction
+          altText="Deshacer"
+          onClick={async () => {
+            // Restore previous date
+            updateTaskOptimistic(taskId, { dueDate: taskToUpdate.dueDate });
+            
+            // Update in database
+            await supabase
+              .from('tasks')
+              .update({ due_date: taskToUpdate.dueDate })
+              .eq('id', taskId);
+          }}
+        >
+          Deshacer
+        </ToastAction>
+      ),
+    });
+  }, [tasks, updateTaskOptimistic]);
 
   const formatDate = (dateString?: string) => {
     if (!dateString) return null;
@@ -404,7 +382,7 @@ export function Dashboard() {
             <Skeleton className="h-2 flex-1" />
           ) : (
             <Progress
-              value={progressPercentage}
+              value={progressPercentage || 0}
               className="h-2 flex-1"
               data-oid="q0bqs4w"
             />
@@ -414,7 +392,7 @@ export function Dashboard() {
             <Skeleton className="h-4 w-12" />
           ) : (
             <span className="text-sm text-muted-foreground" data-oid="dgh123w">
-              {progressPercentage}% completado
+              {progressPercentage || 0}% completado
             </span>
           )}
         </div>

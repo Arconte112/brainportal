@@ -80,14 +80,14 @@ export function NoteDialog({
   useEffect(() => {
     const fetchData = async () => {
       const { data: projData, error: projError } = await supabase
-        .from<Project>("projects")
+        .from("projects")
         .select("id,name,color")
         .order("name", { ascending: true });
       if (projError) console.error("Error loading projects:", projError);
       else setProjects(projData || []);
 
       const { data: taskData, error: taskError } = await supabase
-        .from<Task>("tasks")
+        .from("tasks")
         .select("id,title")
         .order("title", { ascending: true });
       if (taskError) console.error("Error loading tasks:", taskError);

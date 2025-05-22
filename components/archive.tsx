@@ -3,26 +3,17 @@
 import { useState, useEffect } from "react";
 import { supabase } from "@/lib/supabaseClient";
 import { NoteDialog } from "@/components/note-dialog";
-
-// Tipo para notas archivadas
-type Note = {
-  id: string;
-  title: string;
-  content: string | null;
-  project_id: string | null;
-  date: string;
-  projects?: { name: string; color: string } | null;
-};
+import type { Note, DatabaseNote } from "@/types";
 
 export function Archive() {
-  const [notes, setNotes] = useState<Note[]>([]);
-  const [selectedNote, setSelectedNote] = useState<Note | null>(null);
+  const [notes, setNotes] = useState<DatabaseNote[]>([]);
+  const [selectedNote, setSelectedNote] = useState<DatabaseNote | null>(null);
   const [openDialog, setOpenDialog] = useState(false);
 
   useEffect(() => {
     const loadNotes = async () => {
       const { data, error } = await supabase
-        .from<Note>("notes")
+        .from("notes")
         .select("id,title,content,project_id,date,projects(name,color)")
         .order("date", { ascending: false });
       if (error) console.error("Error loading archived notes:", error);
@@ -116,7 +107,13 @@ export function Archive() {
                   }
                   setNotes((prev) =>
                     prev.map((n) =>
-                      n.id === updated.id ? { ...n, ...updatedData[0] } : n
+                      n.id === updated.id ? {
+                        ...n,
+                        title: updatedData[0].title,
+                        content: updatedData[0].content,
+                        date: updatedData[0].date,
+                        projectId: updatedData[0].project_id
+                      } : n
                     )
                   );
                 }

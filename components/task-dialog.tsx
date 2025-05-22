@@ -22,16 +22,9 @@ import {
 import { FileText, LinkIcon, X, Plus, Edit, Save } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import type { Task } from "./dashboard";
+import type { Task, Note } from "@/types";
 
-// Tipo para las notas
-type Note = {
-  id: string;
-  title: string;
-  content: string;
-  projectId: string;
-  date: string;
-};
+// Usar tipos centrales en lugar de definiciones locales
 
 interface TaskDialogProps {
   task: Task;

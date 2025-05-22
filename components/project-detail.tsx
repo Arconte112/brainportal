@@ -18,17 +18,12 @@ import { Progress } from "@/components/ui/progress";
 import { NoteDialog } from "./note-dialog";
 import { TaskDialog } from "./task-dialog";
 import { Badge } from "@/components/ui/badge";
-import type { Task, Note } from "./dashboard";
+import type { Task, Note, Project as ProjectType } from "@/types";
 import { toast } from "@/components/ui/use-toast";
 import { supabase } from "@/lib/supabaseClient";
 
-// Tipos de datos
-type Project = {
-  id: string;
-  name: string;
-  description?: string;
-  color?: string; // Color personalizado para la etiqueta
-};
+// Alias para evitar conflictos con el component Project
+type Project = ProjectType;
 
 // Datos de ejemplo
 export const PROJECTS: Project[] = [
@@ -270,7 +265,7 @@ export function ProjectDetail({ projectId }: { projectId: string }) {
   useEffect(() => {
     const loadProjects = async () => {
       const { data: prjs, error: prjErr } = await supabase
-        .from<Project>('projects')
+        .from('projects')
         .select('id,name,description,color');
       if (prjErr) console.error('Error fetching projects list:', prjErr);
       else setAllProjects(prjs ?? []);
@@ -292,7 +287,7 @@ export function ProjectDetail({ projectId }: { projectId: string }) {
   const fetchProjectData = async () => {
     // Proyecto
     const { data: proj, error: projErr } = await supabase
-      .from<Project>('projects')
+      .from('projects')
       .select('id,name,description,color')
       .eq('id', projectId)
       .single();
@@ -365,33 +360,100 @@ export function ProjectDetail({ projectId }: { projectId: string }) {
     e.preventDefault();
   };
 
-  const handleDrop = (e: React.DragEvent, targetStatus: "pending" | "done") => {
+  const handleDrop = async (e: React.DragEvent, targetStatus: "pending" | "done") => {
     e.preventDefault();
     const taskId = e.dataTransfer.getData("taskId");
+    
+    const taskToUpdate = tasks.find(task => task.id === taskId);
+    if (!taskToUpdate) return;
 
-    setTasks(
-      tasks.map((task) =>
+    // Optimistic update - update UI immediately
+    setTasks(prevTasks => 
+      prevTasks.map((task) =>
         task.id === taskId ? { ...task, status: targetStatus } : task,
       ),
     );
+
+    // Persist to database
+    try {
+      const { error } = await supabase
+        .from('tasks')
+        .update({ status: targetStatus })
+        .eq('id', taskId);
+      
+      if (error) {
+        console.error('Error updating task status:', error);
+        // Revert optimistic update on error
+        setTasks(prevTasks => 
+          prevTasks.map((task) =>
+            task.id === taskId ? { ...task, status: taskToUpdate.status } : task,
+          ),
+        );
+        toast({
+          title: "Error",
+          description: "No se pudo actualizar el estado de la tarea",
+          variant: "destructive"
+        });
+      } else {
+        toast({
+          title: targetStatus === 'done' ? "¡Tarea completada!" : "Tarea pendiente",
+          description: `"${taskToUpdate.title}" se movió a ${targetStatus === 'done' ? 'Hecho' : 'Pendiente'}`,
+        });
+      }
+    } catch (error) {
+      console.error('Error updating task:', error);
+      // Revert on error
+      setTasks(prevTasks => 
+        prevTasks.map((task) =>
+          task.id === taskId ? { ...task, status: taskToUpdate.status } : task,
+        ),
+      );
+    }
   };
 
-  const assignTodayDate = (e: React.MouseEvent, taskId: string) => {
+  const assignTodayDate = async (e: React.MouseEvent, taskId: string) => {
     e.stopPropagation(); // Evitar que se abra el diálogo de tarea
 
     const today = new Date().toISOString().split("T")[0];
+    const taskToUpdate = tasks.find((t) => t.id === taskId);
+    if (!taskToUpdate) return;
+
+    // Optimistic update
     setTasks(
       tasks.map((task) =>
         task.id === taskId ? { ...task, dueDate: today } : task,
       ),
     );
 
-    // Mostrar notificación
-    const taskTitle = tasks.find((t) => t.id === taskId)?.title;
-    toast({
-      title: "Fecha asignada",
-      description: `La tarea "${taskTitle}" ha sido programada para hoy`,
-    });
+    try {
+      const { error } = await supabase
+        .from('tasks')
+        .update({ due_date: today })
+        .eq('id', taskId);
+      
+      if (error) {
+        console.error('Error updating task due date:', error);
+        // Revert on error
+        setTasks(
+          tasks.map((task) =>
+            task.id === taskId ? { ...task, dueDate: taskToUpdate.dueDate } : task,
+          ),
+        );
+        toast({
+          title: "Error",
+          description: "No se pudo asignar la fecha",
+          variant: "destructive"
+        });
+        return;
+      }
+
+      toast({
+        title: "Fecha asignada",
+        description: `La tarea "${taskToUpdate.title}" ha sido programada para hoy`,
+      });
+    } catch (error) {
+      console.error('Error updating task due date:', error);
+    }
   };
 
   const handleTaskClick = (task: Task) => {
@@ -417,36 +479,105 @@ export function ProjectDetail({ projectId }: { projectId: string }) {
   };
 
   const handleUpdateTask = async (updatedTask: Task) => {
-    const { error } = await supabase
-      .from('tasks')
-      .update({
-        title: updatedTask.title,
-        description: updatedTask.description || null,
-        status: updatedTask.status,
-        priority: updatedTask.priority,
-        due_date: updatedTask.dueDate || null,
-        project_id: updatedTask.projectId,
-      })
-      .eq('id', updatedTask.id);
-    if (error) console.error('Error updating task:', error);
+    // Optimistic update
+    setTasks(prevTasks =>
+      prevTasks.map((task) =>
+        task.id === updatedTask.id ? updatedTask : task
+      )
+    );
     setTaskDialogOpen(false);
-    fetchProjectData();
+
+    try {
+      const { error } = await supabase
+        .from('tasks')
+        .update({
+          title: updatedTask.title,
+          description: updatedTask.description || null,
+          status: updatedTask.status,
+          priority: updatedTask.priority,
+          due_date: updatedTask.dueDate || null,
+          project_id: updatedTask.projectId,
+        })
+        .eq('id', updatedTask.id);
+      
+      if (error) {
+        console.error('Error updating task:', error);
+        toast({
+          title: "Error",
+          description: "No se pudo actualizar la tarea",
+          variant: "destructive"
+        });
+        // Reload data to get correct state
+        fetchProjectData();
+        return;
+      }
+
+      toast({
+        title: "Tarea actualizada",
+        description: `"${updatedTask.title}" se actualizó correctamente`,
+      });
+    } catch (error) {
+      console.error('Error updating task:', error);
+      fetchProjectData();
+    }
   };
 
   const handleSaveNewTask = async (newTask: Task) => {
-    const { error } = await supabase
-      .from('tasks')
-      .insert({
-        title: newTask.title,
-        description: newTask.description || null,
-        status: newTask.status,
-        priority: newTask.priority,
-        due_date: newTask.dueDate || null,
-        project_id: newTask.projectId,
-      });
-    if (error) console.error('Error creating task:', error);
     setTaskDialogOpen(false);
-    fetchProjectData();
+    
+    try {
+      const { data, error } = await supabase
+        .from('tasks')
+        .insert({
+          title: newTask.title,
+          description: newTask.description || null,
+          status: newTask.status,
+          priority: newTask.priority,
+          due_date: newTask.dueDate || null,
+          project_id: newTask.projectId,
+        })
+        .select('*')
+        .single();
+      
+      if (error) {
+        console.error('Error creating task:', error);
+        toast({
+          title: "Error",
+          description: "No se pudo crear la tarea",
+          variant: "destructive"
+        });
+        return;
+      }
+
+      // Optimistic update - add new task to state
+      if (data) {
+        setTasks(prevTasks => [
+          ...prevTasks,
+          {
+            id: data.id,
+            title: data.title,
+            status: data.status,
+            priority: data.priority,
+            projectId: data.project_id,
+            dueDate: data.due_date || undefined,
+            description: data.description || undefined,
+            linkedNoteIds: [],
+          }
+        ]);
+      }
+
+      toast({
+        title: "Tarea creada",
+        description: `"${newTask.title}" se creó correctamente`,
+      });
+    } catch (error) {
+      console.error('Error creating task:', error);
+      toast({
+        title: "Error",
+        description: "Error inesperado al crear la tarea",
+        variant: "destructive"
+      });
+    }
   };
 
   // Funciones para manejar notas
@@ -456,22 +587,44 @@ export function ProjectDetail({ projectId }: { projectId: string }) {
   };
 
   const handleNoteUpdate = async (updatedNote: Note) => {
-    const { error } = await supabase
-      .from('notes')
-      .update({
-        title: updatedNote.title,
-        content: updatedNote.content,
-        date: updatedNote.date,
-        project_id: updatedNote.projectId,
-      })
-      .eq('id', updatedNote.id);
-    if (error) console.error('Error updating note:', error);
-    toast({
-      title: "Nota actualizada",
-      description: `La nota "${updatedNote.title}" ha sido actualizada correctamente.`,
-    });
+    // Optimistic update
+    setNotes(prevNotes =>
+      prevNotes.map((note) =>
+        note.id === updatedNote.id ? updatedNote : note
+      )
+    );
     setNoteDialogOpen(false);
-    fetchProjectData();
+
+    try {
+      const { error } = await supabase
+        .from('notes')
+        .update({
+          title: updatedNote.title,
+          content: updatedNote.content,
+          date: updatedNote.date,
+          project_id: updatedNote.projectId,
+        })
+        .eq('id', updatedNote.id);
+      
+      if (error) {
+        console.error('Error updating note:', error);
+        toast({
+          title: "Error",
+          description: "No se pudo actualizar la nota",
+          variant: "destructive"
+        });
+        fetchProjectData();
+        return;
+      }
+
+      toast({
+        title: "Nota actualizada",
+        description: `La nota "${updatedNote.title}" ha sido actualizada correctamente.`,
+      });
+    } catch (error) {
+      console.error('Error updating note:', error);
+      fetchProjectData();
+    }
   };
 
   const handleCreateNote = () => {
@@ -487,17 +640,56 @@ export function ProjectDetail({ projectId }: { projectId: string }) {
   };
 
   const handleSaveNewNote = async (newNote: Note) => {
-    const { error } = await supabase
-      .from('notes')
-      .insert({
-        title: newNote.title,
-        content: newNote.content,
-        date: newNote.date,
-        project_id: newNote.projectId,
-      });
-    if (error) console.error('Error creating note:', error);
     setNoteDialogOpen(false);
-    fetchProjectData();
+    
+    try {
+      const { data, error } = await supabase
+        .from('notes')
+        .insert({
+          title: newNote.title,
+          content: newNote.content,
+          date: newNote.date,
+          project_id: newNote.projectId,
+        })
+        .select('*')
+        .single();
+      
+      if (error) {
+        console.error('Error creating note:', error);
+        toast({
+          title: "Error",
+          description: "No se pudo crear la nota",
+          variant: "destructive"
+        });
+        return;
+      }
+
+      // Optimistic update - add new note to state
+      if (data) {
+        setNotes(prevNotes => [
+          {
+            id: data.id,
+            title: data.title,
+            content: data.content,
+            projectId: data.project_id,
+            date: data.date,
+          },
+          ...prevNotes
+        ]);
+      }
+
+      toast({
+        title: "Nota creada",
+        description: `"${newNote.title}" se creó correctamente`,
+      });
+    } catch (error) {
+      console.error('Error creating note:', error);
+      toast({
+        title: "Error",
+        description: "Error inesperado al crear la nota",
+        variant: "destructive"
+      });
+    }
   };
 
   // Función para formatear fechas
@@ -880,8 +1072,28 @@ export function ProjectDetail({ projectId }: { projectId: string }) {
           note={selectedNote}
           open={noteDialogOpen}
           onOpenChange={setNoteDialogOpen}
-          onUpdate={handleNoteUpdate}
-          onSaveNew={handleSaveNewNote}
+          onUpdate={(updated) => {
+            // Convertir el tipo del dialog al tipo Note
+            const noteUpdate: Note = {
+              id: updated.id,
+              title: updated.title,
+              content: updated.content,
+              projectId: updated.projectId,
+              date: updated.date,
+            };
+            handleNoteUpdate(noteUpdate);
+          }}
+          onSaveNew={(updated) => {
+            // Crear nueva nota con ID generado
+            const newNote: Note = {
+              id: `note-${Date.now()}`,
+              title: updated.title,
+              content: updated.content,
+              projectId: updated.projectId,
+              date: updated.date,
+            };
+            handleSaveNewNote(newNote);
+          }}
           isNew={!notes.some((n) => n.id === selectedNote.id)}
           data-oid="e2o5.gh"
         />
@@ -896,7 +1108,13 @@ export function ProjectDetail({ projectId }: { projectId: string }) {
           onUpdate={handleUpdateTask}
           onSaveNew={handleSaveNewTask}
           isNew={isNewTask}
-          projectNotes={notes}
+          projectNotes={notes.map(n => ({
+            id: n.id,
+            title: n.title,
+            content: n.content || '',
+            projectId: n.projectId,
+            date: n.date
+          }))}
           onUpdateNote={handleNoteUpdate}
           projects={allProjects}
           data-oid="0:0ek23"

@@ -219,7 +219,7 @@ export function ProjectTasksList() {
     const fetchData = async () => {
       setLoading(true);
       const { data: prjs, error: prjErr } = await supabase
-        .from<Project>('projects')
+        .from('projects')
         .select('id,name,description');
       if (prjErr) {
         console.error('Error fetching projects:', prjErr);
@@ -227,7 +227,7 @@ export function ProjectTasksList() {
         return;
       }
       const { data: tks, error: tksErr } = await supabase
-        .from<Task>('tasks')
+        .from('tasks')
         .select('id,title,status,priority,due_date,description,project_id');
       if (tksErr) {
         console.error('Error fetching tasks:', tksErr);
@@ -464,7 +464,7 @@ export function ProjectTasksList() {
                           onClick={() => assignTodayDate(task.id)}
                           disabled={
                             task.status === "done" ||
-                            (task.dueDate &&
+                            Boolean(task.dueDate &&
                               new Date(task.dueDate).toDateString() ===
                                 new Date().toDateString())
                           }
