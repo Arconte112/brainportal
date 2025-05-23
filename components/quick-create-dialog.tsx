@@ -11,7 +11,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { CalendarIcon, CheckSquare, FileText, Clock } from "lucide-react";
+import { CalendarIcon, CheckSquare, FileText, Clock, Bell } from "lucide-react";
 import {
   Select,
   SelectContent,
@@ -150,6 +150,11 @@ export function QuickCreateDialog({
   // Estados para nueva nota
   const [noteTitle, setNoteTitle] = useState<string>("");
   const [noteContent, setNoteContent] = useState<string>("");
+  // Estados para nuevo recordatorio
+  const [reminderTitle, setReminderTitle] = useState<string>("");
+  const [reminderDescription, setReminderDescription] = useState<string>("");
+  const [reminderDate, setReminderDate] = useState<string>(todayDate);
+  const [reminderTime, setReminderTime] = useState<string>("09:00");
   // Envío de formulario para crear nota
   const handleNoteSubmit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -159,6 +164,29 @@ export function QuickCreateDialog({
     if (error) console.error('Error creating note:', error);
     setNoteTitle("");
     setNoteContent("");
+    onOpenChange(false);
+    window.location.reload();
+  };
+  
+  // Envío de formulario para crear recordatorio
+  const handleReminderSubmit = async (e: FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    const dateTime = new Date(`${reminderDate}T${reminderTime}`);
+    const dateTimeIso = dateTime.toISOString();
+    const { data, error } = await supabase
+      .from('reminders')
+      .insert({ 
+        title: reminderTitle, 
+        description: reminderDescription || null, 
+        date_time: dateTimeIso,
+        status: 'pending',
+        sound_enabled: true
+      });
+    if (error) console.error('Error creating reminder:', error);
+    setReminderTitle("");
+    setReminderDescription("");
+    setReminderDate(todayDate);
+    setReminderTime("09:00");
     onOpenChange(false);
     window.location.reload();
   };
@@ -235,7 +263,7 @@ export function QuickCreateDialog({
           className="w-full"
           data-oid="wgl419b"
         >
-          <TabsList className="grid grid-cols-3 mb-4" data-oid="6i1aavz">
+          <TabsList className="grid grid-cols-4 mb-4" data-oid="6i1aavz">
             <TabsTrigger
               value="task"
               className="flex items-center gap-1"
@@ -259,6 +287,14 @@ export function QuickCreateDialog({
             >
               <FileText className="h-4 w-4" data-oid="bstwt:w" />
               <span data-oid="9oho_o6">Nota</span>
+            </TabsTrigger>
+            <TabsTrigger
+              value="reminder"
+              className="flex items-center gap-1"
+              data-oid="reminder-tab"
+            >
+              <Bell className="h-4 w-4" data-oid="reminder-icon" />
+              <span data-oid="reminder-label">Recordatorio</span>
             </TabsTrigger>
           </TabsList>
           <TabsContent value="task" className="space-y-4" data-oid="ti3urkm">
@@ -494,6 +530,82 @@ export function QuickCreateDialog({
               <div className="flex justify-end" data-oid="wo8c_b9">
                 <Button type="submit" data-oid="73re1nh">
                   Crear Nota
+                </Button>
+              </div>
+            </form>
+          </TabsContent>
+          <TabsContent value="reminder" className="space-y-4" data-oid="reminder-content">
+            <form onSubmit={handleReminderSubmit} className="space-y-4">
+              <div className="space-y-2" data-oid="reminder-inputs">
+                <Input
+                  placeholder="Título del recordatorio"
+                  value={reminderTitle}
+                  onChange={(e) => setReminderTitle(e.target.value)}
+                  data-oid="reminder-title"
+                  required
+                />
+                <Textarea
+                  placeholder="Descripción (opcional)"
+                  rows={3}
+                  value={reminderDescription}
+                  onChange={(e) => setReminderDescription(e.target.value)}
+                  data-oid="reminder-description"
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-2" data-oid="reminder-datetime">
+                <div data-oid="reminder-date-container">
+                  <label
+                    htmlFor="reminder-date"
+                    className="text-sm text-muted-foreground mb-1 block"
+                    data-oid="reminder-date-label"
+                  >
+                    Fecha
+                  </label>
+                  <Input
+                    id="reminder-date"
+                    type="date"
+                    value={reminderDate}
+                    onChange={(e) => setReminderDate(e.target.value)}
+                    data-oid="reminder-date-input"
+                    required
+                  />
+                </div>
+                <div data-oid="reminder-time-container">
+                  <label
+                    htmlFor="reminder-time"
+                    className="text-sm text-muted-foreground mb-1 block"
+                    data-oid="reminder-time-label"
+                  >
+                    Hora
+                  </label>
+                  <Select
+                    value={reminderTime}
+                    onValueChange={setReminderTime}
+                    data-oid="reminder-time-select"
+                  >
+                    <SelectTrigger id="reminder-time" data-oid="reminder-time-trigger">
+                      <SelectValue
+                        placeholder="Hora"
+                        data-oid="reminder-time-value"
+                      />
+                    </SelectTrigger>
+                    <SelectContent data-oid="reminder-time-content">
+                      {timeOptions.map((option) => (
+                        <SelectItem
+                          key={option.value}
+                          value={option.value}
+                          data-oid="reminder-time-option"
+                        >
+                          {option.display}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+              <div className="flex justify-end" data-oid="reminder-submit">
+                <Button type="submit" data-oid="reminder-button">
+                  Crear Recordatorio
                 </Button>
               </div>
             </form>

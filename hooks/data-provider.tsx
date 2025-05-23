@@ -7,9 +7,11 @@ interface DataContextType {
   tasks: any[];
   projects: any[];
   notes: any[];
+  reminders: any[];
   loadingTasks: boolean;
   loadingProjects: boolean;
   loadingNotes: boolean;
+  loadingReminders: boolean;
   updateTaskOptimistic: (taskId: string, updates: any) => void;
   addTaskOptimistic: (task: any) => void;
   removeTaskOptimistic: (taskId: string) => void;
@@ -18,9 +20,13 @@ interface DataContextType {
   updateNoteOptimistic: (noteId: string, updates: any) => void;
   addNoteOptimistic: (note: any) => void;
   removeNoteOptimistic: (noteId: string) => void;
+  updateReminderOptimistic: (reminderId: string, updates: any) => void;
+  addReminderOptimistic: (reminder: any) => void;
+  removeReminderOptimistic: (reminderId: string) => void;
   reloadTasks: () => void;
   reloadProjects: () => void;
   reloadNotes: () => void;
+  reloadReminders: () => void;
 }
 
 const DataContext = createContext<DataContextType | null>(null);
