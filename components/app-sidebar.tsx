@@ -2,7 +2,7 @@
 
 import { usePathname } from "next/navigation";
 import Link from "next/link";
-import { Calendar, FolderClosed, Archive, Settings, Home } from "lucide-react";
+import { Calendar, FolderClosed, Archive, Settings, Home, LayoutDashboard } from "lucide-react";
 import {
   Sidebar,
   SidebarContent,
@@ -15,6 +15,11 @@ export function AppSidebar() {
   const pathname = usePathname();
 
   const menuItems = [
+    {
+      title: "Dashboard",
+      icon: LayoutDashboard,
+      href: "/dashboard",
+    },
     {
       title: "Hoy",
       icon: Home,
