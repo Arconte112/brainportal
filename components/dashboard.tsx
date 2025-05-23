@@ -45,9 +45,10 @@ export function Dashboard() {
     (task) => task.status === 'done' && task.dueDate === selectedDate
   );
 
-  const progressPercentage = Math.round(
-    (completedTasks.length / tasks.length) * 100,
-  );
+  const totalTasksForDate = pendingTasks.length + completedTasks.length;
+  const progressPercentage = totalTasksForDate > 0
+    ? Math.round((completedTasks.length / totalTasksForDate) * 100)
+    : 0;
 
   // Obtener la siguiente acción prioritaria
   const getNextAction = () => {

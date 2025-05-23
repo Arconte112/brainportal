@@ -365,7 +365,7 @@ export function TaskDialog({
                   </div>
                 )}
 
-                <div className="bg-background/50 p-4 rounded-md min-h-[100px] whitespace-pre-wrap">
+                <div className="bg-background/50 p-4 rounded-md min-h-[100px] max-h-[200px] overflow-y-auto whitespace-pre-wrap">
                   {editedTask.description || (
                     <span className="text-muted-foreground italic">
                       Sin descripción
