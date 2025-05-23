@@ -2,7 +2,7 @@
 
 import { usePathname } from "next/navigation";
 import Link from "next/link";
-import { Calendar, FolderClosed, Archive, Settings, Home } from "lucide-react";
+import { Calendar, FolderClosed, Archive, Settings, Home, BarChart3 } from "lucide-react";
 import {
   Sidebar,
   SidebarContent,
@@ -38,6 +38,12 @@ export function AppSidebar() {
       icon: Archive,
       href: "/notas",
       shortcut: "⌘+3",
+    },
+    {
+      title: "Insights",
+      icon: BarChart3,
+      href: "/insights",
+      shortcut: "⌘+4",
     },
     {
       title: "Ajustes",
