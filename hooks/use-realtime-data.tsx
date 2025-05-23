@@ -2,19 +2,21 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from '@/lib/supabaseClient';
-import type { Task, Project, Note } from '@/types';
+import type { Task, Project, Note, Reminder } from '@/types';
 
 // Global cache for data sharing across components
 const globalCache = {
   tasks: [] as Task[],
   projects: [] as Project[],
   notes: [] as Note[],
+  reminders: [] as Reminder[],
   listeners: new Set<() => void>(),
   subscriptions: {} as Record<string, any>,
   lastFetch: {
     tasks: 0,
     projects: 0,
-    notes: 0
+    notes: 0,
+    reminders: 0
   }
 };
 
@@ -24,9 +26,11 @@ export function useRealtimeData() {
   const [tasks, setTasks] = useState<Task[]>(globalCache.tasks);
   const [projects, setProjects] = useState<Project[]>(globalCache.projects);
   const [notes, setNotes] = useState<Note[]>(globalCache.notes);
+  const [reminders, setReminders] = useState<Reminder[]>(globalCache.reminders);
   const [loadingTasks, setLoadingTasks] = useState(true);
   const [loadingProjects, setLoadingProjects] = useState(true);
   const [loadingNotes, setLoadingNotes] = useState(true);
+  const [loadingReminders, setLoadingReminders] = useState(true);
   
   const forceUpdate = useRef<() => void>(() => {});
 
@@ -35,6 +39,7 @@ export function useRealtimeData() {
     setTasks([...globalCache.tasks]);
     setProjects([...globalCache.projects]);
     setNotes([...globalCache.notes]);
+    setReminders([...globalCache.reminders]);
   }, []);
 
   forceUpdate.current = triggerUpdate;
@@ -172,12 +177,51 @@ export function useRealtimeData() {
     }
   }, [notifyListeners]);
 
+  // Load reminders with caching
+  const loadReminders = useCallback(async (force = false) => {
+    const now = Date.now();
+    if (!force && now - globalCache.lastFetch.reminders < CACHE_DURATION && globalCache.reminders.length > 0) {
+      setLoadingReminders(false);
+      return;
+    }
+
+    try {
+      const { data, error } = await supabase
+        .from('reminders')
+        .select('*')
+        .order('date_time', { ascending: true });
+
+      if (error) {
+        console.error('Error loading reminders:', error);
+        return;
+      }
+
+      const transformedReminders = (data ?? []).map((r) => ({
+        id: r.id,
+        title: r.title,
+        description: r.description || undefined,
+        dateTime: r.date_time,
+        status: r.status,
+        soundEnabled: r.sound_enabled ?? true,
+      }));
+
+      globalCache.reminders = transformedReminders;
+      globalCache.lastFetch.reminders = now;
+      notifyListeners();
+    } catch (error) {
+      console.error('Error loading reminders:', error);
+    } finally {
+      setLoadingReminders(false);
+    }
+  }, [notifyListeners]);
+
   // Initialize real-time subscriptions
   useEffect(() => {
     // Load initial data
     loadTasks();
     loadProjects();
     loadNotes();
+    loadReminders();
 
     // Set up real-time subscriptions only once
     if (!globalCache.subscriptions.tasks) {
@@ -220,11 +264,24 @@ export function useRealtimeData() {
         .subscribe();
     }
 
+    if (!globalCache.subscriptions.reminders) {
+      globalCache.subscriptions.reminders = supabase
+        .channel('global-reminders-changes')
+        .on('postgres_changes', {
+          event: '*',
+          schema: 'public',
+          table: 'reminders'
+        }, () => {
+          loadReminders(true);
+        })
+        .subscribe();
+    }
+
     // Cleanup function for when the app unmounts
     return () => {
       // Don't unsubscribe individual components, only when app unmounts
     };
-  }, [loadTasks, loadProjects, loadNotes]);
+  }, [loadTasks, loadProjects, loadNotes, loadReminders]);
 
   // Optimistic update functions
   const updateTaskOptimistic = useCallback((taskId: string, updates: Partial<Task>) => {
@@ -276,21 +333,43 @@ export function useRealtimeData() {
     notifyListeners();
   }, [notifyListeners]);
 
+  // Optimistic reminder functions
+  const updateReminderOptimistic = useCallback((reminderId: string, updates: Partial<Reminder>) => {
+    const reminderIndex = globalCache.reminders.findIndex(r => r.id === reminderId);
+    if (reminderIndex >= 0) {
+      globalCache.reminders[reminderIndex] = { ...globalCache.reminders[reminderIndex], ...updates };
+      notifyListeners();
+    }
+  }, [notifyListeners]);
+
+  const addReminderOptimistic = useCallback((reminder: Reminder) => {
+    globalCache.reminders.push(reminder);
+    notifyListeners();
+  }, [notifyListeners]);
+
+  const removeReminderOptimistic = useCallback((reminderId: string) => {
+    globalCache.reminders = globalCache.reminders.filter(r => r.id !== reminderId);
+    notifyListeners();
+  }, [notifyListeners]);
+
   return {
     // Data
     tasks,
     projects,
     notes,
+    reminders,
     
     // Loading states
     loadingTasks,
     loadingProjects,
     loadingNotes,
+    loadingReminders,
     
     // Reload functions
     reloadTasks: () => loadTasks(true),
     reloadProjects: () => loadProjects(true),
     reloadNotes: () => loadNotes(true),
+    reloadReminders: () => loadReminders(true),
     
     // Optimistic update functions
     updateTaskOptimistic,
@@ -300,7 +379,10 @@ export function useRealtimeData() {
     addProjectOptimistic,
     updateNoteOptimistic,
     addNoteOptimistic,
-    removeNoteOptimistic
+    removeNoteOptimistic,
+    updateReminderOptimistic,
+    addReminderOptimistic,
+    removeReminderOptimistic
   };
 }
 

@@ -37,6 +37,15 @@ export interface NoteDialogData {
   taskId?: string | null;
 }
 
+export interface Reminder {
+  id: string;
+  title: string;
+  description?: string;
+  dateTime: string; // ISO string format for date and time
+  status: "pending" | "completed" | "dismissed";
+  soundEnabled?: boolean;
+}
+
 export interface DatabaseNote {
   id: string;
   title: string;
