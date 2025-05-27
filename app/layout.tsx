@@ -3,6 +3,8 @@ import type { Metadata } from "next";
 import "./globals.css";
 import { SelectedDateProvider } from "@/hooks/use-selected-date";
 import { DataProvider } from "@/hooks/data-provider";
+import { AISettingsProvider } from "@/hooks/use-ai-settings";
+import { ChatSessionsProvider } from "@/hooks/use-chat-sessions";
 import { ThemeProvider } from "@/components/theme-provider";
 import { Toaster } from "@/components/ui/toaster";
 export const metadata: Metadata = {
@@ -24,10 +26,14 @@ export default function RootLayout({
           data-oid="wrkhxae"
         >
           <DataProvider>
-            <SelectedDateProvider>
-              {children}
-              <Toaster data-oid="1ml1s.d" />
-            </SelectedDateProvider>
+            <AISettingsProvider>
+              <ChatSessionsProvider>
+                <SelectedDateProvider>
+                  {children}
+                  <Toaster data-oid="1ml1s.d" />
+                </SelectedDateProvider>
+              </ChatSessionsProvider>
+            </AISettingsProvider>
           </DataProvider>
         </ThemeProvider>
       </body>
