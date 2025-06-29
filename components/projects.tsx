@@ -1,10 +1,11 @@
 "use client";
 
-import { useState, FormEvent } from "react";
+import { useState, FormEvent, useMemo } from "react";
 import { supabase } from "@/lib/supabaseClient";
 import { Button } from "@/components/ui/button";
-// Importar el tipo UIProject desde la página de proyectos.
-// Idealmente, esto estaría en un archivo de tipos compartido.
+import { useData } from "@/hooks/data-provider";
+import { toast } from "@/components/ui/use-toast";
+import { logger } from "@/lib/logger";
 import type { UIProject } from '@/app/projects/page';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
@@ -50,12 +51,8 @@ interface ProjectsProps {
 }
 
 export function Projects({ initialProjects }: ProjectsProps) {
-  // Los tipos RawProject y RawTask ya no son necesarios aquí si UIProject viene de fuera
-  // y fetchData se elimina o no los usa.
-  // UIProject se importa de @/app/projects/page
-
+  const { projects: dataProjects, tasks, updateProjectOptimistic, addProjectOptimistic, loadingProjects } = useData();
   const [projects, setProjects] = useState<UIProject[]>(initialProjects);
-  // const [loading, setLoading] = useState<boolean>(false); // Ya no es necesario para la carga inicial
 
   // Estado para controlar si se muestran los proyectos archivados
   const [showArchived, setShowArchived] = useState(false);
@@ -73,25 +70,54 @@ export function Projects({ initialProjects }: ProjectsProps) {
     ? projects
     : projects.filter((project) => !project.archived);
 
-  // Archivar/desarchivar proyecto en Supabase
+  // Calcular estadísticas de proyectos
+  const projectsWithStats = useMemo(() => {
+    return projects.map(project => {
+      const projectTasks = tasks.filter(task => task.projectId === project.id);
+      const completedTasks = projectTasks.filter(task => task.status === 'done');
+      
+      return {
+        ...project,
+        tasksCount: projectTasks.length,
+        progress: projectTasks.length > 0 
+          ? Math.round((completedTasks.length / projectTasks.length) * 100)
+          : 0
+      };
+    });
+  }, [projects, tasks]);
+
+  // Archivar/desarchivar proyecto
   const toggleArchiveProject = async (projectId: string) => {
     const proj = projects.find((p) => p.id === projectId);
     if (!proj) return;
-    const { data: updated, error } = await supabase
-      .from('projects')
-      .update({ archived: !proj.archived })
-      .eq('id', projectId)
-      .select('archived')
-      .single();
-    if (error) {
-      console.error('Error updating project:', error);
-      return;
+    
+    const newArchived = !proj.archived;
+    
+    // Actualización optimista
+    updateProjectOptimistic(projectId, { archived: newArchived });
+    
+    toast({
+      title: newArchived ? "Proyecto archivado" : "Proyecto restaurado",
+      description: `"${proj.name}" fue ${newArchived ? 'archivado' : 'restaurado'} exitosamente`,
+    });
+    
+    try {
+      const { error } = await supabase
+        .from('projects')
+        .update({ archived: newArchived })
+        .eq('id', projectId);
+        
+      if (error) throw error;
+    } catch (error) {
+      logger.error('Error updating project', error, 'Projects');
+      // Revertir actualización optimista
+      updateProjectOptimistic(projectId, { archived: proj.archived });
+      toast({
+        title: "Error",
+        description: "No se pudo actualizar el proyecto",
+        variant: "destructive"
+      });
     }
-    setProjects((prev) =>
-      prev.map((p) =>
-        p.id === projectId ? { ...p, archived: updated.archived } : p
-      )
-    );
   };
 
   // Crear nuevo proyecto en Supabase

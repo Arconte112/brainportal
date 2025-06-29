@@ -10,6 +10,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { GoogleCalendarSettings } from "./google-calendar-settings";
 
 export function Settings() {
   return (
@@ -141,6 +142,13 @@ export function Settings() {
             </Select>
           </div>
         </div>
+      </div>
+
+      <div className="space-y-4" data-oid="gcal-integration">
+        <h2 className="text-lg font-medium" data-oid="gcal-title">
+          Integraciones
+        </h2>
+        <GoogleCalendarSettings />
       </div>
 
       <div className="flex justify-end" data-oid="50pxs.a">

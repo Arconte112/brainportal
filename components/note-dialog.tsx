@@ -14,6 +14,9 @@ import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
 import { supabase } from "@/lib/supabaseClient";
+import { useData } from "@/hooks/data-provider";
+import { logger } from "@/lib/logger";
+import { toast } from "@/components/ui/use-toast";
 
 type Note = {
   id: string;
@@ -64,10 +67,9 @@ export function NoteDialog({
   onSaveNew,
   isNew,
 }: NoteDialogProps) {
+  const { projects, tasks } = useData();
   const [editedNote, setEditedNote] = useState<Note>(note);
   const [isEditing, setIsEditing] = useState(isNew);
-  const [projects, setProjects] = useState<Project[]>([]);
-  const [tasks, setTasks] = useState<Task[]>([]);
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
 
   // Update local state when the note prop changes
@@ -76,25 +78,7 @@ export function NoteDialog({
     setIsEditing(isNew);
   }, [note, isNew]);
 
-  // Fetch projects and tasks lists
-  useEffect(() => {
-    const fetchData = async () => {
-      const { data: projData, error: projError } = await supabase
-        .from("projects")
-        .select("id,name,color")
-        .order("name", { ascending: true });
-      if (projError) console.error("Error loading projects:", projError);
-      else setProjects(projData || []);
-
-      const { data: taskData, error: taskError } = await supabase
-        .from("tasks")
-        .select("id,title")
-        .order("title", { ascending: true });
-      if (taskError) console.error("Error loading tasks:", taskError);
-      else setTasks(taskData || []);
-    };
-    fetchData();
-  }, []);
+  // Ya no necesitamos fetch de projects y tasks porque vienen del DataProvider
 
   // Fetch existing task link for existing notes
   useEffect(() => {

@@ -2,34 +2,30 @@
 
 import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
-import { ChevronLeft, ChevronRight } from "lucide-react";
+import { ChevronLeft, ChevronRight, Cloud, CloudOff, RefreshCw } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 import { supabase } from "@/lib/supabaseClient";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogClose } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
+import { useData } from "@/hooks/data-provider";
+import { Event } from "@/types";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 
-// Evento para el calendario extraído de Supabase
-type CalendarEvent = {
-  id: string;
-  title: string;
-  start_time: string;
-  end_time: string;
-  priority: string;
-};
 // Tareas para el día seleccionado
 type CalendarTask = { id: string; title: string; status: string; priority: string };
 // Tareas del mes actual (incluye due_date)
 type CalendarTaskMonthly = { id: string; title: string; status: string; priority: string; due_date: string };
 
 export function Calendar() {
+  const { events, loadingEvents } = useData();
   const [currentDate, setCurrentDate] = useState(new Date());
-  const [events, setEvents] = useState<CalendarEvent[]>([]);
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
   const [tasks, setTasks] = useState<CalendarTask[]>([]);
   const [monthlyTasks, setMonthlyTasks] = useState<CalendarTaskMonthly[]>([]);
   const [isLoadingMonthData, setIsLoadingMonthData] = useState(true);
   const [isLoadingDayTasks, setIsLoadingDayTasks] = useState(false);
+  const [selectedDateEvents, setSelectedDateEvents] = useState<Event[]>([]);
 
   const getDaysInMonth = (year: number, month: number) => {
     return new Date(year, month + 1, 0).getDate();
@@ -56,11 +52,16 @@ export function Calendar() {
   const daysInMonth = getDaysInMonth(year, month);
   const firstDayOfMonth = getFirstDayOfMonth(year, month);
   const today = new Date();
-  // Al hacer click en un día, cargar tareas y mostrar modal
+  // Al hacer click en un día, cargar tareas y eventos para mostrar modal
   const handleDayClick = async (day: number) => {
     const date = new Date(year, month, day);
     setSelectedDate(date);
     setIsLoadingDayTasks(true);
+    
+    // Obtener eventos del día seleccionado
+    const dayEvents = getEventsForDay(day);
+    setSelectedDateEvents(dayEvents);
+    
     const dateStr = date.toISOString().substring(0, 10);
     try {
       const { data: tasksData, error: tasksError } = await supabase
@@ -82,79 +83,30 @@ export function Calendar() {
     }
   };
 
-  // Cargar eventos y tareas desde Supabase para el mes actual
+  // Cargar tareas del mes actual
   useEffect(() => {
-    const loadDataForMonth = async () => {
+    const loadTasksForMonth = async () => {
       setIsLoadingMonthData(true);
-      const cacheKey = `calendarData-${year}-${month}`;
-      const cachedDataString = sessionStorage.getItem(cacheKey);
-
-      if (cachedDataString) {
-        try {
-          const cachedData = JSON.parse(cachedDataString);
-          // Optional: Add a timestamp and check for staleness if needed
-          // For now, if it's in session storage for this month/year, use it.
-          setEvents(cachedData.events);
-          setMonthlyTasks(cachedData.monthlyTasks);
-          setIsLoadingMonthData(false);
-          return;
-        } catch (e) {
-          console.error("Error parsing cached calendar data", e);
-          sessionStorage.removeItem(cacheKey); // Clear corrupted cache
-        }
-      }
-
-      const startOfMonth = new Date(year, month, 1);
-      startOfMonth.setHours(0, 0, 0, 0);
-      const endOfMonth = new Date(year, month + 1, 1);
-      endOfMonth.setHours(0, 0, 0, 0); // This will be the first moment of the next month
-
       try {
-        const [eventsResponse, tasksResponse] = await Promise.all([
-          supabase
-            .from("events")
-            .select("id, title, start_time, end_time, priority")
-            .gte("start_time", startOfMonth.toISOString())
-            .lt("start_time", endOfMonth.toISOString())
-            .order("start_time", { ascending: true }),
-          supabase
-            .from("tasks")
-            .select("id, title, status, priority, due_date")
-            .gte("due_date", `${year}-${String(month + 1).padStart(2, '0')}-01`)
-            .lt("due_date", `${year}-${String(month + 2).padStart(2, '0')}-01`) // Correctly targets tasks up to the end of the current month
-            .order("due_date", { ascending: true })
-        ]);
+        const { data: tasksData, error } = await supabase
+          .from("tasks")
+          .select("id, title, status, priority, due_date")
+          .gte("due_date", `${year}-${String(month + 1).padStart(2, '0')}-01`)
+          .lt("due_date", `${year}-${String(month + 2).padStart(2, '0')}-01`)
+          .order("due_date", { ascending: true });
 
-        const newEvents = eventsResponse.data ?? [];
-        const newMonthlyTasks = tasksResponse.data ?? [];
-
-        if (eventsResponse.error) {
-          console.error("Error loading calendar events:", eventsResponse.error);
-          setEvents([]);
-        } else {
-          setEvents(newEvents);
+        if (!error && tasksData) {
+          setMonthlyTasks(tasksData);
         }
-
-        if (tasksResponse.error) {
-          console.error("Error loading calendar tasks:", tasksResponse.error);
-          setMonthlyTasks([]);
-        } else {
-          setMonthlyTasks(newMonthlyTasks);
-        }
-        
-        // Cache the new data
-        sessionStorage.setItem(cacheKey, JSON.stringify({ events: newEvents, monthlyTasks: newMonthlyTasks }));
-
       } catch (error) {
-        console.error("Error loading month data:", error);
-        setEvents([]);
+        console.error("Error loading month tasks:", error);
         setMonthlyTasks([]);
       } finally {
         setIsLoadingMonthData(false);
       }
     };
     
-    loadDataForMonth();
+    loadTasksForMonth();
   }, [year, month]);
 
   // Adjust for Sunday as first day (0) to Monday as first day (1)
@@ -168,7 +120,7 @@ export function Calendar() {
     days.push(i);
   }
 
-  const getEventsForDay = (day: number) => {
+  const getEventsForDay = (day: number): Event[] => {
     return events.filter((event) => {
       const d = new Date(event.start_time);
       return (
@@ -267,17 +219,44 @@ export function Calendar() {
                     </div>
                     <div className="mt-1 space-y-1" data-oid="hvh:eul">
                       {getEventsForDay(day).map((event) => (
-                        <div
-                          key={event.id}
-                          className="text-xs p-1 border-l-2 border-white bg-secondary/30 rounded-sm truncate"
-                          title={`${event.title} - ${new Date(event.start_time).toLocaleTimeString('es-ES', {hour: '2-digit', minute: '2-digit'})}`}
-                          data-oid="_yqc50j"
-                        >
-                          <span className="font-medium" data-oid="d.2xihp">
-                            {new Date(event.start_time).toLocaleTimeString('es-ES', {hour: '2-digit', minute: '2-digit'})}
-                          </span>{" "}
-                          {event.title}
-                        </div>
+                        <TooltipProvider key={event.id}>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <div
+                                className={cn(
+                                  "text-xs p-1 border-l-2 rounded-sm truncate flex items-center gap-1",
+                                  event.google_event_id 
+                                    ? "border-blue-500 bg-blue-500/20" 
+                                    : "border-white bg-secondary/30"
+                                )}
+                                data-oid="_yqc50j"
+                              >
+                                <span className="font-medium" data-oid="d.2xihp">
+                                  {new Date(event.start_time).toLocaleTimeString('es-ES', {hour: '2-digit', minute: '2-digit'})}
+                                </span>
+                                {event.title}
+                                {event.google_event_id && (
+                                  <Cloud className="h-3 w-3 text-blue-500 ml-auto flex-shrink-0" />
+                                )}
+                              </div>
+                            </TooltipTrigger>
+                            <TooltipContent>
+                              <div className="space-y-1">
+                                <p className="font-medium">{event.title}</p>
+                                <p className="text-xs">
+                                  {new Date(event.start_time).toLocaleTimeString('es-ES', {hour: '2-digit', minute: '2-digit'})} - 
+                                  {new Date(event.end_time).toLocaleTimeString('es-ES', {hour: '2-digit', minute: '2-digit'})}
+                                </p>
+                                {event.google_event_id && (
+                                  <p className="text-xs text-blue-500">Sincronizado con Google Calendar</p>
+                                )}
+                                {event.sync_status === 'conflict' && (
+                                  <p className="text-xs text-yellow-500">Conflicto de sincronización</p>
+                                )}
+                              </div>
+                            </TooltipContent>
+                          </Tooltip>
+                        </TooltipProvider>
                       ))}
                     </div>
                     {getTasksCountForDay(day) > 0 && (
@@ -304,10 +283,22 @@ export function Calendar() {
         <div className="grid grid-cols-2 gap-4">
           <div>
             <h3 className="text-lg font-medium mb-2">Eventos</h3>
-            {selectedDate && getEventsForDay(selectedDate.getDate()).length > 0 ? (
-              getEventsForDay(selectedDate.getDate()).map((event) => (
-                <div key={event.id} className="text-sm mb-1">
-                  <strong>{new Date(event.start_time).toLocaleTimeString("es-ES", { hour: "2-digit", minute: "2-digit" })}</strong> - {event.title}
+            {selectedDateEvents.length > 0 ? (
+              selectedDateEvents.map((event) => (
+                <div key={event.id} className="text-sm mb-2 p-2 rounded-md bg-secondary/20">
+                  <div className="flex items-center gap-2">
+                    <strong>{new Date(event.start_time).toLocaleTimeString("es-ES", { hour: "2-digit", minute: "2-digit" })}</strong>
+                    {event.google_event_id && (
+                      <Cloud className="h-3 w-3 text-blue-500" />
+                    )}
+                  </div>
+                  <p>{event.title}</p>
+                  {event.location && (
+                    <p className="text-xs text-muted-foreground">📍 {event.location}</p>
+                  )}
+                  {event.sync_status === 'conflict' && (
+                    <p className="text-xs text-yellow-500 mt-1">⚠️ Conflicto de sincronización</p>
+                  )}
                 </div>
               ))
             ) : (

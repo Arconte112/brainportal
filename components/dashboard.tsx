@@ -2,7 +2,7 @@
 
 import type React from "react";
 
-import { useState, useCallback, useMemo } from "react";
+import { useState, useCallback, useMemo, useEffect } from "react";
 import { useSelectedDate } from "@/hooks/use-selected-date";
 import { useData } from "@/hooks/data-provider";
 import { supabase } from "@/lib/supabaseClient";
@@ -18,6 +18,8 @@ import { toast } from "@/components/ui/use-toast";
 import { ToastAction } from "@/components/ui/toast";
 import { logger } from "@/lib/logger";
 import { withRetry } from "@/lib/utils/retry";
+import { ProjectCardDropdown } from "./project-card-dropdown";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 import type { Task, Note } from '@/types';
 
@@ -383,6 +385,17 @@ export function Dashboard() {
 
   return (
     <div className="space-y-6" data-oid="agnad0s">
+      {loadingTasks ? (
+        <Skeleton className="h-40 w-full" data-oid="n5qqcf_" />
+      ) : (
+        <WeeklyCalendar
+          selectedDate={selectedDate}
+          onSelectDate={setSelectedDate}
+          tasks={tasks}
+          data-oid="n5qqcf_"
+        />
+      )}
+
       <div className="space-y-2" data-oid="fy69c7u">
         <h1 className="text-2xl font-bold" data-oid="57nt3-f">
           {formatDate(selectedDate) ?? selectedDate}
@@ -404,32 +417,21 @@ export function Dashboard() {
         </div>
       </div>
 
-      {loadingTasks ? (
-        <Skeleton className="h-40 w-full" data-oid="n5qqcf_" />
-      ) : (
-        <WeeklyCalendar
-          selectedDate={selectedDate}
-          onSelectDate={setSelectedDate}
-          tasks={tasks}
-          data-oid="n5qqcf_"
-        />
-      )}
+      <Tabs defaultValue="tasks" className="w-full">
+        <div className="flex justify-between items-center mb-4">
+          <TabsList className="grid w-fit grid-cols-2">
+            <TabsTrigger value="tasks">Tareas</TabsTrigger>
+            <TabsTrigger value="projects">Proyectos</TabsTrigger>
+          </TabsList>
+          <Button size="sm" onClick={handleCreateTask} data-oid="xsfheb9">
+            <Plus className="h-4 w-4 mr-1" data-oid="d7sg6tm" /> Nueva Tarea
+          </Button>
+        </div>
 
-      <div
-        className="flex justify-between items-center mb-2"
-        data-oid="-984mi."
-      >
-        <h2 className="text-lg font-medium" data-oid="1:7_1ei">
-          Tareas
-        </h2>
-        <Button size="sm" onClick={handleCreateTask} data-oid="xsfheb9">
-          <Plus className="h-4 w-4 mr-1" data-oid="d7sg6tm" /> Nueva Tarea
-        </Button>
-      </div>
-
-      {loadingTasks ? (
-        <SkeletonLoader type="list" count={4} className="grid grid-cols-1 md:grid-cols-2 gap-4" />
-      ) : (
+        <TabsContent value="tasks" className="mt-0">
+          {loadingTasks ? (
+            <SkeletonLoader type="list" count={4} className="grid grid-cols-1 md:grid-cols-2 gap-4" />
+          ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4" data-oid="c8:051v">
         <div
           className="kanban-column"
@@ -619,8 +621,36 @@ export function Dashboard() {
             </div>
           ))}
         </div>
-      </div>
-      )}
+          </div>
+          )}
+        </TabsContent>
+
+        <TabsContent value="projects" className="mt-0">
+          {loadingProjects ? (
+            <SkeletonLoader type="card" count={3} />
+          ) : (
+            <div className="space-y-3">
+              {projects.filter(p => !p.archived).length === 0 ? (
+                <p className="text-center text-muted-foreground py-8">
+                  No hay proyectos activos
+                </p>
+              ) : (
+                projects
+                  .filter(p => !p.archived)
+                  .map(project => (
+                    <ProjectCardDropdown
+                      key={project.id}
+                      project={project}
+                      tasks={tasks}
+                      selectedDate={selectedDate}
+                      onTaskDateUpdate={updateTaskOptimistic}
+                    />
+                  ))
+              )}
+            </div>
+          )}
+        </TabsContent>
+      </Tabs>
 
       {selectedTask && (
         <TaskDialog

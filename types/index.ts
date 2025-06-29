@@ -46,6 +46,27 @@ export interface Reminder {
   soundEnabled?: boolean;
 }
 
+export interface Event {
+  id: string;
+  title: string;
+  description?: string;
+  start_time: string; // ISO string format
+  end_time: string; // ISO string format
+  priority: "high" | "medium" | "low";
+  location?: string;
+  all_day?: boolean;
+  recurring?: boolean;
+  recurrence_rule?: string;
+  reminder_minutes?: number;
+  project_id?: string;
+  // Google Calendar sync fields
+  google_event_id?: string;
+  google_calendar_id?: string;
+  sync_status?: "pending" | "synced" | "error" | "conflict";
+  last_synced?: string;
+  google_etag?: string; // For detecting changes
+}
+
 export interface DatabaseNote {
   id: string;
   title: string;
@@ -110,4 +131,38 @@ export interface AIProvider {
   models: string[];
   max_tokens: number;
   supports_tools: boolean;
+}
+
+// Google Calendar Integration Types
+export interface GoogleCalendarConfig {
+  id: string;
+  user_id?: string;
+  access_token: string;
+  refresh_token: string;
+  token_expiry?: string;
+  selected_calendars?: string[];
+  sync_enabled: boolean;
+  sync_interval_minutes?: number;
+  last_sync?: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface GoogleCalendar {
+  id: string;
+  summary: string;
+  description?: string;
+  timeZone?: string;
+  primary?: boolean;
+  accessRole: string;
+  backgroundColor?: string;
+  foregroundColor?: string;
+}
+
+export interface SyncResult {
+  imported: number;
+  updated: number;
+  errors: number;
+  conflicts: string[];
+  lastSync: string;
 }

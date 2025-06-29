@@ -20,7 +20,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-
+import { useData } from "@/hooks/data-provider";
+import { toast } from "@/components/ui/use-toast";
 import { supabase } from "@/lib/supabaseClient";
 // Tipo para los eventos
 type Event = {
@@ -107,46 +108,111 @@ export function QuickCreateDialog({
   // const [taskDescription, setTaskDescription] = useState("");
   const todayDate = new Date().toISOString().split("T")[0];
 
+  const { addTaskOptimistic, addNoteOptimistic, addReminderOptimistic } = useData();
+
   // Envío de formulario para crear tarea
   const handleTaskSubmit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    const { data, error } = await supabase
-      .from('tasks')
-      .insert({ title: taskTitle, description: taskDescription || null, due_date: todayDate });
-    if (error) {
-      logger.error('Error creating task', error, 'QuickCreateDialog');
-    }
+    
+    // Crear objeto de tarea temporal
+    const tempId = `temp-${Date.now()}`;
+    const newTask = {
+      id: tempId,
+      title: taskTitle,
+      description: taskDescription || undefined,
+      status: 'pending' as const,
+      priority: 'medium' as const,
+      dueDate: todayDate,
+      projectId: undefined,
+      linkedNoteIds: []
+    };
+    
+    // Actualización optimista
+    addTaskOptimistic(newTask);
+    
+    // Limpiar formulario y cerrar diálogo inmediatamente
     setTaskTitle("");
     setTaskDescription("");
     onOpenChange(false);
-    // Refrescar para mostrar cambios
-    window.location.reload();
+    
+    // Mostrar toast de éxito
+    toast({
+      title: "Tarea creada",
+      description: `"${newTask.title}" se agregó para hoy`,
+    });
+    
+    // Guardar en base de datos
+    try {
+      const { data, error } = await supabase
+        .from('tasks')
+        .insert({ 
+          title: taskTitle, 
+          description: taskDescription || null, 
+          due_date: todayDate,
+          status: 'pending',
+          priority: 'medium'
+        })
+        .select()
+        .single();
+        
+      if (error) {
+        throw error;
+      }
+      
+      // La suscripción en tiempo real actualizará con el ID real
+    } catch (error) {
+      logger.error('Error creating task', error, 'QuickCreateDialog');
+      toast({
+        title: "Error",
+        description: "No se pudo crear la tarea",
+        variant: "destructive"
+      });
+    }
   };
   
   // Envío de formulario para crear evento
   const handleEventSubmit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
+    
     // Convert selected date and time to proper ISO strings (local to UTC)
     const start = new Date(`${selectedDate}T${startTime}`);
     const end = new Date(`${selectedDate}T${endTime}`);
     const startIso = start.toISOString();
     const endIso = end.toISOString();
-    const { data, error } = await supabase
-      .from('events')
-      .insert({
-        title: eventTitle,
-        description: eventDescription || null,
-        start_time: startIso,
-        end_time: endIso,
-        priority: 'medium',
-      });
-    if (error) {
-      logger.error('Error creating event', error, 'QuickCreateDialog');
-    }
+    
+    // Limpiar formulario y cerrar diálogo inmediatamente
     setEventTitle("");
     setEventDescription("");
     onOpenChange(false);
-    window.location.reload();
+    
+    // Mostrar toast de éxito
+    toast({
+      title: "Evento creado",
+      description: `"${eventTitle}" se programó para ${selectedDate}`,
+    });
+    
+    try {
+      const { data, error } = await supabase
+        .from('events')
+        .insert({
+          title: eventTitle,
+          description: eventDescription || null,
+          start_time: startIso,
+          end_time: endIso,
+          priority: 'medium',
+        });
+        
+      if (error) {
+        throw error;
+      }
+    } catch (error) {
+      logger.error('Error creating event', error, 'QuickCreateDialog');
+      toast({
+        title: "Error",
+        description: "No se pudo crear el evento",
+        variant: "destructive"
+      });
+    }
   };
   // Estados para nueva nota
   const [noteTitle, setNoteTitle] = useState<string>("");
@@ -159,37 +225,115 @@ export function QuickCreateDialog({
   // Envío de formulario para crear nota
   const handleNoteSubmit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    const { data, error } = await supabase
-      .from('notes')
-      .insert({ title: noteTitle, content: noteContent || null, date: todayDate });
-    if (error) logger.error('Error creating note', error, 'QuickCreateDialog');
+    
+    // Crear objeto de nota temporal
+    const tempId = `temp-${Date.now()}`;
+    const newNote = {
+      id: tempId,
+      title: noteTitle,
+      content: noteContent || '',
+      projectId: undefined,
+      createdAt: new Date().toISOString()
+    };
+    
+    // Actualización optimista
+    addNoteOptimistic(newNote);
+    
+    // Limpiar formulario y cerrar diálogo inmediatamente
     setNoteTitle("");
     setNoteContent("");
     onOpenChange(false);
-    window.location.reload();
+    
+    // Mostrar toast de éxito
+    toast({
+      title: "Nota creada",
+      description: `"${newNote.title}" se creó exitosamente`,
+    });
+    
+    // Guardar en base de datos
+    try {
+      const { data, error } = await supabase
+        .from('notes')
+        .insert({ 
+          title: noteTitle, 
+          content: noteContent || null, 
+          date: todayDate 
+        })
+        .select()
+        .single();
+        
+      if (error) {
+        throw error;
+      }
+    } catch (error) {
+      logger.error('Error creating note', error, 'QuickCreateDialog');
+      toast({
+        title: "Error",
+        description: "No se pudo crear la nota",
+        variant: "destructive"
+      });
+    }
   };
   
   // Envío de formulario para crear recordatorio
   const handleReminderSubmit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
+    
     const dateTime = new Date(`${reminderDate}T${reminderTime}`);
     const dateTimeIso = dateTime.toISOString();
-    const { data, error } = await supabase
-      .from('reminders')
-      .insert({ 
-        title: reminderTitle, 
-        description: reminderDescription || null, 
-        date_time: dateTimeIso,
-        status: 'pending',
-        sound_enabled: true
-      });
-    if (error) logger.error('Error creating reminder', error, 'QuickCreateDialog');
+    
+    // Crear objeto de recordatorio temporal
+    const tempId = `temp-${Date.now()}`;
+    const newReminder = {
+      id: tempId,
+      title: reminderTitle,
+      description: reminderDescription || undefined,
+      dateTime: dateTimeIso,
+      status: 'pending' as const,
+      soundEnabled: true
+    };
+    
+    // Actualización optimista
+    addReminderOptimistic(newReminder);
+    
+    // Limpiar formulario y cerrar diálogo inmediatamente
     setReminderTitle("");
     setReminderDescription("");
     setReminderDate(todayDate);
     setReminderTime("09:00");
     onOpenChange(false);
-    window.location.reload();
+    
+    // Mostrar toast de éxito
+    toast({
+      title: "Recordatorio creado",
+      description: `"${newReminder.title}" se programó para ${reminderDate} a las ${reminderTime}`,
+    });
+    
+    // Guardar en base de datos
+    try {
+      const { data, error } = await supabase
+        .from('reminders')
+        .insert({ 
+          title: reminderTitle, 
+          description: reminderDescription || null, 
+          date_time: dateTimeIso,
+          status: 'pending',
+          sound_enabled: true
+        })
+        .select()
+        .single();
+        
+      if (error) {
+        throw error;
+      }
+    } catch (error) {
+      logger.error('Error creating reminder', error, 'QuickCreateDialog');
+      toast({
+        title: "Error",
+        description: "No se pudo crear el recordatorio",
+        variant: "destructive"
+      });
+    }
   };
   const [selectedDate, setSelectedDate] = useState<string>(
     new Date().toISOString().split("T")[0],
