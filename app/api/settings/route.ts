@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
+import { logger } from '@/lib/logger';
 import { AISettings } from '@/types';
 import { DEFAULT_AI_SETTINGS } from '@/lib/ai-config';
 
@@ -28,7 +29,7 @@ export async function GET() {
 
     return NextResponse.json({ settings: finalSettings });
   } catch (error) {
-    console.error('Error fetching settings:', error);
+    logger.error('Error fetching settings', error, 'SettingsAPI');
     return NextResponse.json(
       { error: 'Internal server error' },
       { status: 500 }
@@ -82,7 +83,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({ settings: result.data });
   } catch (error) {
-    console.error('Error saving settings:', error);
+    logger.error('Error saving settings', error, 'SettingsAPI');
     return NextResponse.json(
       { error: 'Internal server error' },
       { status: 500 }

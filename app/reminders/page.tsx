@@ -10,6 +10,7 @@ import { supabase } from "@/lib/supabaseClient";
 import { toast } from "@/components/ui/use-toast";
 import { Plus, Bell, Clock, CheckCircle, X, Volume2, VolumeX } from "lucide-react";
 import type { Reminder } from "@/types";
+import { logger } from "@/lib/logger";
 
 export default function RemindersPage() {
   const {
@@ -29,13 +30,13 @@ export default function RemindersPage() {
         .eq("id", reminderId);
 
       if (error) {
-        console.error("Error marking reminder as completed:", error);
+        logger.error("Error marking reminder as completed", error, "RemindersPage");
         return;
       }
 
       updateReminderOptimistic(reminderId, { status: "completed" });
     } catch (error) {
-      console.error("Error updating reminder:", error);
+      logger.error("Error updating reminder", error, "RemindersPage");
     }
   };
 
@@ -96,7 +97,7 @@ export default function RemindersPage() {
           .single();
 
         if (error) {
-          console.error("Error creating reminder:", error);
+          logger.error("Error creating reminder", error, "RemindersPage");
           toast({
             title: "Error",
             description: "No se pudo crear el recordatorio",
@@ -122,7 +123,7 @@ export default function RemindersPage() {
           description: `"${reminder.title}" se programó correctamente`,
         });
       } catch (error) {
-        console.error("Error creating reminder:", error);
+        logger.error("Error creating reminder", error, "RemindersPage");
         toast({
           title: "Error",
           description: "Error inesperado al crear el recordatorio",
@@ -144,7 +145,7 @@ export default function RemindersPage() {
           .eq("id", reminder.id);
 
         if (error) {
-          console.error("Error updating reminder:", error);
+          logger.error("Error updating reminder", error, "RemindersPage");
           toast({
             title: "Error",
             description: "No se pudo actualizar el recordatorio",
@@ -161,7 +162,7 @@ export default function RemindersPage() {
           description: `"${reminder.title}" se actualizó correctamente`,
         });
       } catch (error) {
-        console.error("Error updating reminder:", error);
+        logger.error("Error updating reminder", error, "RemindersPage");
         toast({
           title: "Error",
           description: "Error inesperado al actualizar el recordatorio",
@@ -179,7 +180,7 @@ export default function RemindersPage() {
         .eq("id", reminderId);
 
       if (error) {
-        console.error("Error marking reminder as completed:", error);
+        logger.error("Error marking reminder as completed", error, "RemindersPage");
         toast({
           title: "Error",
           description: "No se pudo marcar como completado",
@@ -194,7 +195,7 @@ export default function RemindersPage() {
         description: "El recordatorio se marcó como completado",
       });
     } catch (error) {
-      console.error("Error updating reminder:", error);
+      logger.error("Error updating reminder", error, "RemindersPage");
     }
   };
 
@@ -206,7 +207,7 @@ export default function RemindersPage() {
         .eq("id", reminderId);
 
       if (error) {
-        console.error("Error deleting reminder:", error);
+        logger.error("Error deleting reminder", error, "RemindersPage");
         toast({
           title: "Error",
           description: "No se pudo eliminar el recordatorio",
@@ -221,7 +222,7 @@ export default function RemindersPage() {
         description: "El recordatorio se eliminó correctamente",
       });
     } catch (error) {
-      console.error("Error deleting reminder:", error);
+      logger.error("Error deleting reminder", error, "RemindersPage");
     }
   };
 

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, FormEvent } from "react";
+import { logger } from "@/lib/logger";
 import {
   Dialog,
   DialogContent,
@@ -113,7 +114,7 @@ export function QuickCreateDialog({
       .from('tasks')
       .insert({ title: taskTitle, description: taskDescription || null, due_date: todayDate });
     if (error) {
-      console.error('Error creating task:', error);
+      logger.error('Error creating task', error, 'QuickCreateDialog');
     }
     setTaskTitle("");
     setTaskDescription("");
@@ -140,7 +141,7 @@ export function QuickCreateDialog({
         priority: 'medium',
       });
     if (error) {
-      console.error('Error creating event:', error);
+      logger.error('Error creating event', error, 'QuickCreateDialog');
     }
     setEventTitle("");
     setEventDescription("");
@@ -161,7 +162,7 @@ export function QuickCreateDialog({
     const { data, error } = await supabase
       .from('notes')
       .insert({ title: noteTitle, content: noteContent || null, date: todayDate });
-    if (error) console.error('Error creating note:', error);
+    if (error) logger.error('Error creating note', error, 'QuickCreateDialog');
     setNoteTitle("");
     setNoteContent("");
     onOpenChange(false);
@@ -182,7 +183,7 @@ export function QuickCreateDialog({
         status: 'pending',
         sound_enabled: true
       });
-    if (error) console.error('Error creating reminder:', error);
+    if (error) logger.error('Error creating reminder', error, 'QuickCreateDialog');
     setReminderTitle("");
     setReminderDescription("");
     setReminderDate(todayDate);

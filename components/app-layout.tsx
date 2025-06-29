@@ -7,6 +7,7 @@ import { AppSidebar } from "./app-sidebar";
 import { TopBar } from "./top-bar";
 import { ChatBot } from "./chat-bot";
 import { SidebarProvider } from "@/components/ui/sidebar";
+import { logger } from "@/lib/logger";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Dialog,
@@ -71,7 +72,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
         e.key === "c" &&
         !["INPUT", "TEXTAREA"].includes((e.target as HTMLElement).tagName)
       ) {
-        console.log("Quick create");
+        logger.debug("Quick create triggered", null, 'AppLayout');
       }
     };
     window.addEventListener("keydown", handleKeyDown);
@@ -99,7 +100,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
         .gte("start_time", utcStart)
         .lt("start_time", utcEnd)
         .order("start_time", { ascending: true });
-      if (error) console.error("Error loading today events:", error);
+      if (error) logger.error("Error loading today events", error, 'AppLayout');
       else setTodayEvents(todayData ?? []);
     } finally {
       setLoadingTodayEvents(false);
@@ -121,7 +122,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
         .gt("start_time", now.toISOString())
         .order("start_time", { ascending: true })
         .limit(5);
-      if (error) console.error("Error loading upcoming events:", error);
+      if (error) logger.error("Error loading upcoming events", error, 'AppLayout');
       else setUpcomingEvents(upcomingData ?? []);
     } finally {
       setLoadingUpcomingEvents(false);
@@ -148,7 +149,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
       .single();
 
     if (error) {
-      console.error("Error fetching event details:", error);
+      logger.error("Error fetching event details", error, 'AppLayout');
       return;
     }
     if (data) {
@@ -173,7 +174,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
       .eq("id", selectedEvent.id);
 
     if (error) {
-      console.error("Error updating event:", error);
+      logger.error("Error updating event", error, 'AppLayout');
     } else {
       setSelectedEvent(null);
       await loadTodayEvents(); // Refresh today's events
@@ -192,7 +193,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
       const localDate = new Date(date.getTime() - offset);
       return localDate.toISOString().substring(0, 16);
     } catch (e) {
-      console.error("Error formatting date for input:", e);
+      logger.error("Error formatting date for input", e, 'AppLayout');
       return ""; // Fallback to empty string if date is invalid
     }
   };

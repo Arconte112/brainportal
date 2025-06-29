@@ -4,6 +4,7 @@ import { createClient } from '@supabase/supabase-js';
 import { getTokenCount, getMessagesTokenCount, trimMessagesToTokenLimit } from '@/lib/token-utils';
 import { AVAILABLE_TOOLS, DEFAULT_AI_SETTINGS } from '@/lib/ai-config';
 import { ChatMessage, ToolCall, ToolResult } from '@/types';
+import { logger } from '@/lib/logger';
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -158,7 +159,7 @@ export async function POST(request: NextRequest) {
     });
 
   } catch (error) {
-    console.error('Chat API error:', error);
+    logger.error('Chat API error', error, 'ChatAPI');
     return NextResponse.json(
       { error: 'Internal server error' },
       { status: 500 }

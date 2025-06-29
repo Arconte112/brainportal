@@ -1,5 +1,6 @@
 import { encoding_for_model, TiktokenModel, get_encoding } from 'tiktoken';
 import { ChatMessage } from '@/types';
+import { logger } from '@/lib/logger';
 
 // Mapping de modelos a tiktoken models
 const MODEL_MAPPING: Record<string, TiktokenModel | string> = {
@@ -28,7 +29,7 @@ export function getTokenCount(text: string, model: string = 'gpt-4o'): number {
     encoding.free();
     return tokens.length;
   } catch (error) {
-    console.error('Error counting tokens:', error);
+    logger.error('Error counting tokens', error, 'TokenUtils');
     // Fallback: rough estimation (1 token ≈ 4 characters)
     return Math.ceil(text.length / 4);
   }

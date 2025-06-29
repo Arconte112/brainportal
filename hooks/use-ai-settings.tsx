@@ -3,6 +3,7 @@
 import { createContext, useContext, useEffect, useState, ReactNode } from 'react';
 import { AISettings } from '@/types';
 import { DEFAULT_AI_SETTINGS } from '@/lib/ai-config';
+import { logger } from '@/lib/logger';
 
 interface AISettingsContextType {
   settings: AISettings;
@@ -36,7 +37,7 @@ export function AISettingsProvider({ children }: { children: ReactNode }) {
       setSettings(data.settings);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Unknown error');
-      console.error('Error loading AI settings:', err);
+      logger.error('Error loading AI settings', err, 'AISettings');
     } finally {
       setIsLoading(false);
     }
@@ -64,7 +65,7 @@ export function AISettingsProvider({ children }: { children: ReactNode }) {
       setSettings(data.settings);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Unknown error');
-      console.error('Error saving AI settings:', err);
+      logger.error('Error saving AI settings', err, 'AISettings');
       throw err;
     }
   };

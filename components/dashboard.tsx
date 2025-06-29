@@ -2,12 +2,13 @@
 
 import type React from "react";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useMemo } from "react";
 import { useSelectedDate } from "@/hooks/use-selected-date";
 import { useData } from "@/hooks/data-provider";
 import { supabase } from "@/lib/supabaseClient";
 import { Progress } from "@/components/ui/progress";
 import { Skeleton } from "@/components/ui/skeleton";
+import { SkeletonLoader } from "@/components/ui/skeleton-loader";
 import { WeeklyCalendar } from "./weekly-calendar";
 import { Button } from "@/components/ui/button";
 import { Plus, Calendar, CalendarOff } from "lucide-react";
@@ -15,6 +16,8 @@ import { TaskDialog } from "./task-dialog";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "@/components/ui/use-toast";
 import { ToastAction } from "@/components/ui/toast";
+import { logger } from "@/lib/logger";
+import { withRetry } from "@/lib/utils/retry";
 
 import type { Task, Note } from '@/types';
 
@@ -37,21 +40,29 @@ export function Dashboard() {
   const [taskDialogOpen, setTaskDialogOpen] = useState(false);
   const [isNewTask, setIsNewTask] = useState(false);
 
-  // Filtrar tareas por día seleccionado
-  const pendingTasks = tasks.filter(
-    (task) => task.status === 'pending' && task.dueDate === selectedDate
-  );
-  const completedTasks = tasks.filter(
-    (task) => task.status === 'done' && task.dueDate === selectedDate
-  );
+  // Memoizar el filtrado de tareas para evitar recálculos innecesarios
+  const { pendingTasks, completedTasks, totalTasksForDate, progressPercentage } = useMemo(() => {
+    const pending = tasks.filter(
+      (task) => task.status === 'pending' && task.dueDate === selectedDate
+    );
+    const completed = tasks.filter(
+      (task) => task.status === 'done' && task.dueDate === selectedDate
+    );
+    const total = pending.length + completed.length;
+    const progress = total > 0
+      ? Math.round((completed.length / total) * 100)
+      : 0;
 
-  const totalTasksForDate = pendingTasks.length + completedTasks.length;
-  const progressPercentage = totalTasksForDate > 0
-    ? Math.round((completedTasks.length / totalTasksForDate) * 100)
-    : 0;
+    return {
+      pendingTasks: pending,
+      completedTasks: completed,
+      totalTasksForDate: total,
+      progressPercentage: progress
+    };
+  }, [tasks, selectedDate]);
 
-  // Obtener la siguiente acción prioritaria
-  const getNextAction = () => {
+  // Memoizar el cálculo de la siguiente acción prioritaria
+  const nextAction = useMemo(() => {
     // Ordenar tareas pendientes por prioridad y fecha de vencimiento
     const sortedTasks = [...pendingTasks].sort((a, b) => {
       // Primero por prioridad
@@ -72,9 +83,7 @@ export function Dashboard() {
     });
 
     return sortedTasks[0] || null;
-  };
-
-  const nextAction = getNextAction();
+  }, [pendingTasks]);
 
   const handleDragStart = (e: React.DragEvent, taskId: string) => {
     e.dataTransfer.setData("taskId", taskId);
@@ -102,7 +111,7 @@ export function Dashboard() {
         .eq('id', taskId);
       
       if (error) {
-        console.error('Error updating task status:', error);
+        logger.error('Error updating task status', error, 'Dashboard');
         // Revert optimistic update on error
         updateTaskOptimistic(taskId, { status: taskToUpdate.status });
         toast({
@@ -117,7 +126,7 @@ export function Dashboard() {
         });
       }
     } catch (error) {
-      console.error('Error updating task:', error);
+      logger.error('Error updating task', error, 'Dashboard');
       // Revert on error
       updateTaskOptimistic(taskId, { status: taskToUpdate.status });
     }
@@ -137,12 +146,12 @@ export function Dashboard() {
         .eq('id', taskId);
       
       if (error) {
-        console.error('Error marking task as done:', error);
+        logger.error('Error marking task as done', error, 'Dashboard');
         // Revert on error
         updateTaskOptimistic(taskId, { status: "pending" });
       }
     } catch (error) {
-      console.error('Error updating task:', error);
+      logger.error('Error updating task', error, 'Dashboard');
     }
   }, [tasks, updateTaskOptimistic]);
 
@@ -189,7 +198,7 @@ export function Dashboard() {
         .single();
       
       if (error) {
-        console.error("Error updating task:", error);
+        logger.error('Error updating task', error, 'Dashboard');
         toast({
           title: "Error",
           description: "No se pudo actualizar la tarea",
@@ -224,7 +233,7 @@ export function Dashboard() {
         description: `"${updatedTask.title}" se actualizó correctamente`,
       });
     } catch (error) {
-      console.error("Error updating task:", error);
+      logger.error('Error updating task', error, 'Dashboard');
       toast({
         title: "Error",
         description: "Error inesperado al actualizar la tarea",
@@ -252,7 +261,7 @@ export function Dashboard() {
         .single();
       
       if (error) {
-        console.error("Error creating task:", error);
+        logger.error('Error creating task', error, 'Dashboard');
         toast({
           title: "Error",
           description: "No se pudo crear la tarea",
@@ -279,7 +288,7 @@ export function Dashboard() {
         description: `"${newTask.title}" se creó correctamente`,
       });
     } catch (error) {
-      console.error("Error creating task:", error);
+      logger.error('Error creating task', error, 'Dashboard');
       toast({
         title: "Error",
         description: "Error inesperado al crear la tarea",
@@ -315,7 +324,7 @@ export function Dashboard() {
       .eq('id', taskId);
     
     if (removeError) {
-      console.error('Error removing due date:', removeError);
+      logger.error('Error removing due date', removeError, 'Dashboard');
       // Revert optimistic update
       updateTaskOptimistic(taskId, { dueDate: taskToUpdate.dueDate });
       toast({ title: 'Error', description: 'No se pudo quitar la fecha de la tarea.' });
@@ -379,23 +388,19 @@ export function Dashboard() {
           {formatDate(selectedDate) ?? selectedDate}
         </h1>
         <div className="flex items-center gap-4" data-oid="-w4p0pr">
-          {loadingTasks ? (
-            <Skeleton className="h-2 flex-1" />
-          ) : (
-            <Progress
-              value={progressPercentage || 0}
-              className="h-2 flex-1"
-              data-oid="q0bqs4w"
-            />
-          )}
+          <Progress
+            value={loadingTasks ? 0 : (progressPercentage || 0)}
+            className="h-2 flex-1"
+            data-oid="q0bqs4w"
+          />
 
-          {loadingTasks ? (
-            <Skeleton className="h-4 w-12" />
-          ) : (
-            <span className="text-sm text-muted-foreground" data-oid="dgh123w">
-              {progressPercentage || 0}% completado
-            </span>
-          )}
+          <span className="text-sm text-muted-foreground" data-oid="dgh123w">
+            {loadingTasks ? (
+              <Skeleton className="h-4 w-12 inline-block" />
+            ) : (
+              `${progressPercentage || 0}% completado`
+            )}
+          </span>
         </div>
       </div>
 
@@ -422,19 +427,9 @@ export function Dashboard() {
         </Button>
       </div>
 
-      {loadingTasks && (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4" data-oid="c8:051v">
-          {[ 'Pendiente', 'Hecho' ].map((title) => (
-            <div key={title} className="kanban-column">
-              <h2 className="text-lg font-medium mb-3">{title}</h2>
-              {[...Array(3)].map((_, i) => (
-                <Skeleton key={i} className="h-12 mb-2" />
-              ))}
-            </div>
-          ))}
-        </div>
-      )}
-      {!loadingTasks && (
+      {loadingTasks ? (
+        <SkeletonLoader type="list" count={4} className="grid grid-cols-1 md:grid-cols-2 gap-4" />
+      ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4" data-oid="c8:051v">
         <div
           className="kanban-column"

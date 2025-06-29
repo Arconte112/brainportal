@@ -3,6 +3,8 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from '@/lib/supabaseClient';
 import type { Task, Project, Note, Reminder } from '@/types';
+import { logger } from '@/lib/logger';
+import { CACHE } from '@/lib/constants';
 
 // Global cache for data sharing across components
 const globalCache = {
@@ -20,7 +22,6 @@ const globalCache = {
   }
 };
 
-const CACHE_DURATION = 5000; // 5 seconds
 
 export function useRealtimeData() {
   const [tasks, setTasks] = useState<Task[]>(globalCache.tasks);
@@ -60,7 +61,7 @@ export function useRealtimeData() {
   // Load tasks with caching
   const loadTasks = useCallback(async (force = false) => {
     const now = Date.now();
-    if (!force && now - globalCache.lastFetch.tasks < CACHE_DURATION && globalCache.tasks.length > 0) {
+    if (!force && now - globalCache.lastFetch.tasks < CACHE.DURATION_MS && globalCache.tasks.length > 0) {
       setLoadingTasks(false);
       return;
     }
@@ -81,7 +82,7 @@ export function useRealtimeData() {
         .order('created_at', { ascending: true });
 
       if (error) {
-        console.error('Error loading tasks:', error);
+        logger.error('Error loading tasks', error, 'RealtimeData');
         return;
       }
 
@@ -104,7 +105,7 @@ export function useRealtimeData() {
         notifyListeners();
       }
     } catch (error) {
-      console.error('Error loading tasks:', error);
+      logger.error('Error loading tasks', error, 'RealtimeData');
     } finally {
       setLoadingTasks(false);
     }
@@ -113,7 +114,7 @@ export function useRealtimeData() {
   // Load projects with caching
   const loadProjects = useCallback(async (force = false) => {
     const now = Date.now();
-    if (!force && now - globalCache.lastFetch.projects < CACHE_DURATION && globalCache.projects.length > 0) {
+    if (!force && now - globalCache.lastFetch.projects < CACHE.DURATION_MS && globalCache.projects.length > 0) {
       setLoadingProjects(false);
       return;
     }
@@ -126,7 +127,7 @@ export function useRealtimeData() {
         .order('created_at', { ascending: true });
 
       if (error) {
-        console.error('Error loading projects:', error);
+        logger.error('Error loading projects', error, 'RealtimeData');
         return;
       }
 
@@ -134,7 +135,7 @@ export function useRealtimeData() {
       globalCache.lastFetch.projects = now;
       notifyListeners();
     } catch (error) {
-      console.error('Error loading projects:', error);
+      logger.error('Error loading projects', error, 'RealtimeData');
     } finally {
       setLoadingProjects(false);
     }
@@ -143,7 +144,7 @@ export function useRealtimeData() {
   // Load notes with caching
   const loadNotes = useCallback(async (force = false) => {
     const now = Date.now();
-    if (!force && now - globalCache.lastFetch.notes < CACHE_DURATION && globalCache.notes.length > 0) {
+    if (!force && now - globalCache.lastFetch.notes < CACHE.DURATION_MS && globalCache.notes.length > 0) {
       setLoadingNotes(false);
       return;
     }
@@ -155,7 +156,7 @@ export function useRealtimeData() {
         .order('date', { ascending: false });
 
       if (error) {
-        console.error('Error loading notes:', error);
+        logger.error('Error loading notes', error, 'RealtimeData');
         return;
       }
 
@@ -171,7 +172,7 @@ export function useRealtimeData() {
       globalCache.lastFetch.notes = now;
       notifyListeners();
     } catch (error) {
-      console.error('Error loading notes:', error);
+      logger.error('Error loading notes', error, 'RealtimeData');
     } finally {
       setLoadingNotes(false);
     }
@@ -180,7 +181,7 @@ export function useRealtimeData() {
   // Load reminders with caching
   const loadReminders = useCallback(async (force = false) => {
     const now = Date.now();
-    if (!force && now - globalCache.lastFetch.reminders < CACHE_DURATION && globalCache.reminders.length > 0) {
+    if (!force && now - globalCache.lastFetch.reminders < CACHE.DURATION_MS && globalCache.reminders.length > 0) {
       setLoadingReminders(false);
       return;
     }
@@ -192,7 +193,7 @@ export function useRealtimeData() {
         .order('date_time', { ascending: true });
 
       if (error) {
-        console.error('Error loading reminders:', error);
+        logger.error('Error loading reminders', error, 'RealtimeData');
         return;
       }
 
@@ -209,7 +210,7 @@ export function useRealtimeData() {
       globalCache.lastFetch.reminders = now;
       notifyListeners();
     } catch (error) {
-      console.error('Error loading reminders:', error);
+      logger.error('Error loading reminders', error, 'RealtimeData');
     } finally {
       setLoadingReminders(false);
     }
@@ -232,7 +233,7 @@ export function useRealtimeData() {
           schema: 'public',
           table: 'tasks'
         }, (payload) => {
-          console.log('Task change detected:', payload);
+          logger.debug('Task change detected', payload, 'RealtimeData');
           loadTasks(true);
         })
         .subscribe();

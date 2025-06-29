@@ -7,6 +7,8 @@ import { AISettingsProvider } from "@/hooks/use-ai-settings";
 import { ChatSessionsProvider } from "@/hooks/use-chat-sessions";
 import { ThemeProvider } from "@/components/theme-provider";
 import { Toaster } from "@/components/ui/toaster";
+import { ErrorBoundary } from "@/components/error-boundary";
+import { OfflineIndicator } from "@/components/offline-indicator";
 export const metadata: Metadata = {
   title: "Productivity Portal",
   description: "A minimalist productivity web app",
@@ -25,16 +27,19 @@ export default function RootLayout({
           disableTransitionOnChange
           data-oid="wrkhxae"
         >
-          <DataProvider>
-            <AISettingsProvider>
-              <ChatSessionsProvider>
-                <SelectedDateProvider>
-                  {children}
-                  <Toaster data-oid="1ml1s.d" />
-                </SelectedDateProvider>
-              </ChatSessionsProvider>
-            </AISettingsProvider>
-          </DataProvider>
+          <ErrorBoundary>
+            <DataProvider>
+              <AISettingsProvider>
+                <ChatSessionsProvider>
+                  <SelectedDateProvider>
+                    {children}
+                    <Toaster data-oid="1ml1s.d" />
+                    <OfflineIndicator />
+                  </SelectedDateProvider>
+                </ChatSessionsProvider>
+              </AISettingsProvider>
+            </DataProvider>
+          </ErrorBoundary>
         </ThemeProvider>
       </body>
     </html>

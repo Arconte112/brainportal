@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
+import { logger } from '@/lib/logger';
 import { ChatSession } from '@/types';
 import { DEFAULT_AI_SETTINGS } from '@/lib/ai-config';
 
@@ -25,7 +26,7 @@ export async function GET() {
 
     return NextResponse.json({ sessions });
   } catch (error) {
-    console.error('Error fetching sessions:', error);
+    logger.error('Error fetching sessions', error, 'SessionsAPI');
     return NextResponse.json(
       { error: 'Internal server error' },
       { status: 500 }
@@ -61,7 +62,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({ session });
   } catch (error) {
-    console.error('Error creating session:', error);
+    logger.error('Error creating session', error, 'SessionsAPI');
     return NextResponse.json(
       { error: 'Internal server error' },
       { status: 500 }

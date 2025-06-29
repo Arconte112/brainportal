@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
+import { logger } from '@/lib/logger';
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -47,7 +48,7 @@ export async function GET(
       messages: messages || [],
     });
   } catch (error) {
-    console.error('Error fetching session:', error);
+    logger.error('Error fetching session', error, 'SessionAPI');
     return NextResponse.json(
       { error: 'Internal server error' },
       { status: 500 }
@@ -83,7 +84,7 @@ export async function PUT(
 
     return NextResponse.json({ session });
   } catch (error) {
-    console.error('Error updating session:', error);
+    logger.error('Error updating session', error, 'SessionAPI');
     return NextResponse.json(
       { error: 'Internal server error' },
       { status: 500 }
@@ -120,7 +121,7 @@ export async function DELETE(
 
     return NextResponse.json({ success: true });
   } catch (error) {
-    console.error('Error deleting session:', error);
+    logger.error('Error deleting session', error, 'SessionAPI');
     return NextResponse.json(
       { error: 'Internal server error' },
       { status: 500 }
