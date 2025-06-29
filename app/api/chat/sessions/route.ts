@@ -4,13 +4,12 @@ import { logger } from '@/lib/logger';
 import { ChatSession } from '@/types';
 import { DEFAULT_AI_SETTINGS } from '@/lib/ai-config';
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-);
-
 // GET - List all chat sessions
 export async function GET() {
+  const supabase = createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+  );
   try {
     const { data: sessions, error } = await supabase
       .from('chat_sessions')
@@ -36,6 +35,11 @@ export async function GET() {
 
 // POST - Create new chat session
 export async function POST(request: NextRequest) {
+  const supabase = createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+  );
+  
   try {
     const { title, maxTokens } = await request.json();
 

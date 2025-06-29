@@ -6,17 +6,17 @@ import { AVAILABLE_TOOLS, DEFAULT_AI_SETTINGS } from '@/lib/ai-config';
 import { ChatMessage, ToolCall, ToolResult } from '@/types';
 import { logger } from '@/lib/logger';
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-);
-
-const openai = new OpenAI({
-  apiKey: process.env.OPENROUTER_API_KEY,
-  baseURL: 'https://openrouter.ai/api/v1',
-});
-
 export async function POST(request: NextRequest) {
+  // Initialize clients inside the function to avoid build-time errors
+  const supabase = createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+  );
+
+  const openai = new OpenAI({
+    apiKey: process.env.OPENROUTER_API_KEY || '',
+    baseURL: 'https://openrouter.ai/api/v1',
+  });
   try {
     const { sessionId, message, settings } = await request.json();
 

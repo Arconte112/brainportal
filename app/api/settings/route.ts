@@ -4,13 +4,12 @@ import { logger } from '@/lib/logger';
 import { AISettings } from '@/types';
 import { DEFAULT_AI_SETTINGS } from '@/lib/ai-config';
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-);
-
 // GET - Get AI settings
 export async function GET() {
+  const supabase = createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+  );
   try {
     const { data: settings, error } = await supabase
       .from('ai_settings')
@@ -39,6 +38,11 @@ export async function GET() {
 
 // POST - Save/Update AI settings
 export async function POST(request: NextRequest) {
+  const supabase = createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+  );
+  
   try {
     const newSettings: Partial<AISettings> = await request.json();
 
