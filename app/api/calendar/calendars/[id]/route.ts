@@ -3,17 +3,20 @@ import { supabase } from '@/lib/supabaseClient';
 
 export async function PATCH(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const body = await request.json();
     const { selected } = body;
+    
+    // Await params in Next.js 15
+    const { id } = await params;
 
     // Update calendar selection
     const { error } = await supabase
       .from('google_calendars')
       .update({ selected })
-      .eq('id', params.id);
+      .eq('id', id);
 
     if (error) {
       throw error;

@@ -5,8 +5,6 @@
       "Bash(npx tsc:*)",
       "Bash(grep:*)",
       "Bash(cat:*)",
-      "Bash(rm:*)",
-      "Bash(bun add:*)",
       "Bash(npm install:*)",
       "Bash(mkdir:*)",
       "Bash(chmod:*)",

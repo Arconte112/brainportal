@@ -7,10 +7,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ### Available Commands
 ```bash
 # Development
-bun dev              # Start development server on localhost:3000
-bun build            # Build for production
-bun start            # Start production server
-bun lint             # Run ESLint
+npm run dev              # Start development server on localhost:3000
 
 # Docker (production)
 docker build --build-arg NEXT_PUBLIC_SUPABASE_URL=<url> --build-arg NEXT_PUBLIC_SUPABASE_ANON_KEY=<key> -t brainportal .
@@ -29,7 +26,7 @@ node tests/token-utils-test.js
 - **UI**: Radix UI components + Tailwind CSS + shadcn/ui
 - **State Management**: React Context (`DataProvider`) + Custom hooks with optimistic updates
 - **Language**: TypeScript with strict mode
-- **Runtime**: Bun for package management and builds
+- **Runtime**: npm for package management and builds
 - **AI Integration**: OpenAI-compatible APIs via OpenRouter
 
 ### Key Architecture Patterns

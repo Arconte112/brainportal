@@ -3,14 +3,17 @@ import { googleCalendarSync } from '@/lib/google-calendar-sync';
 
 export async function POST(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const body = await request.json();
     const { calendarId } = body;
+    
+    // Await params in Next.js 15
+    const { id } = await params;
 
     // Export event to Google Calendar
-    const success = await googleCalendarSync.exportEvent(params.id, calendarId);
+    const success = await googleCalendarSync.exportEvent(id, calendarId);
 
     if (!success) {
       throw new Error('Failed to export event');

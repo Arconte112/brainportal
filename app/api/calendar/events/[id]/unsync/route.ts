@@ -3,11 +3,14 @@ import { googleCalendarSync } from '@/lib/google-calendar-sync';
 
 export async function POST(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    // Await params in Next.js 15
+    const { id } = await params;
+    
     // Delete event from Google Calendar
-    const success = await googleCalendarSync.deleteGoogleEvent(params.id);
+    const success = await googleCalendarSync.deleteGoogleEvent(id);
 
     if (!success) {
       throw new Error('Failed to unsync event');
