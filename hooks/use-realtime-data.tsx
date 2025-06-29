@@ -2,7 +2,9 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from '@/lib/supabaseClient';
-import type { Task, Project, Note, Reminder } from '@/types';
+import type { Task, Project, Note, Reminder, Event } from '@/types';
+import { logger } from '@/lib/logger';
+import { CACHE } from '@/lib/constants';
 
 // Global cache for data sharing across components
 const globalCache = {
@@ -10,36 +12,41 @@ const globalCache = {
   projects: [] as Project[],
   notes: [] as Note[],
   reminders: [] as Reminder[],
+  events: [] as Event[],
   listeners: new Set<() => void>(),
   subscriptions: {} as Record<string, any>,
   lastFetch: {
     tasks: 0,
     projects: 0,
     notes: 0,
-    reminders: 0
+    reminders: 0,
+    events: 0
   }
 };
 
-const CACHE_DURATION = 5000; // 5 seconds
 
 export function useRealtimeData() {
   const [tasks, setTasks] = useState<Task[]>(globalCache.tasks);
   const [projects, setProjects] = useState<Project[]>(globalCache.projects);
   const [notes, setNotes] = useState<Note[]>(globalCache.notes);
   const [reminders, setReminders] = useState<Reminder[]>(globalCache.reminders);
+  const [events, setEvents] = useState<Event[]>(globalCache.events);
   const [loadingTasks, setLoadingTasks] = useState(true);
   const [loadingProjects, setLoadingProjects] = useState(true);
   const [loadingNotes, setLoadingNotes] = useState(true);
   const [loadingReminders, setLoadingReminders] = useState(true);
+  const [loadingEvents, setLoadingEvents] = useState(true);
   
   const forceUpdate = useRef<() => void>(() => {});
 
   // Force update function
   const triggerUpdate = useCallback(() => {
+    // Force React to see these as new arrays
     setTasks([...globalCache.tasks]);
     setProjects([...globalCache.projects]);
     setNotes([...globalCache.notes]);
     setReminders([...globalCache.reminders]);
+    setEvents([...globalCache.events]);
   }, []);
 
   forceUpdate.current = triggerUpdate;
@@ -60,7 +67,7 @@ export function useRealtimeData() {
   // Load tasks with caching
   const loadTasks = useCallback(async (force = false) => {
     const now = Date.now();
-    if (!force && now - globalCache.lastFetch.tasks < CACHE_DURATION && globalCache.tasks.length > 0) {
+    if (!force && now - globalCache.lastFetch.tasks < CACHE.DURATION_MS && globalCache.tasks.length > 0) {
       setLoadingTasks(false);
       return;
     }
@@ -81,7 +88,7 @@ export function useRealtimeData() {
         .order('created_at', { ascending: true });
 
       if (error) {
-        console.error('Error loading tasks:', error);
+        logger.error('Error loading tasks', error, 'RealtimeData');
         return;
       }
 
@@ -104,7 +111,7 @@ export function useRealtimeData() {
         notifyListeners();
       }
     } catch (error) {
-      console.error('Error loading tasks:', error);
+      logger.error('Error loading tasks', error, 'RealtimeData');
     } finally {
       setLoadingTasks(false);
     }
@@ -113,7 +120,7 @@ export function useRealtimeData() {
   // Load projects with caching
   const loadProjects = useCallback(async (force = false) => {
     const now = Date.now();
-    if (!force && now - globalCache.lastFetch.projects < CACHE_DURATION && globalCache.projects.length > 0) {
+    if (!force && now - globalCache.lastFetch.projects < CACHE.DURATION_MS && globalCache.projects.length > 0) {
       setLoadingProjects(false);
       return;
     }
@@ -126,7 +133,7 @@ export function useRealtimeData() {
         .order('created_at', { ascending: true });
 
       if (error) {
-        console.error('Error loading projects:', error);
+        logger.error('Error loading projects', error, 'RealtimeData');
         return;
       }
 
@@ -134,7 +141,7 @@ export function useRealtimeData() {
       globalCache.lastFetch.projects = now;
       notifyListeners();
     } catch (error) {
-      console.error('Error loading projects:', error);
+      logger.error('Error loading projects', error, 'RealtimeData');
     } finally {
       setLoadingProjects(false);
     }
@@ -143,7 +150,7 @@ export function useRealtimeData() {
   // Load notes with caching
   const loadNotes = useCallback(async (force = false) => {
     const now = Date.now();
-    if (!force && now - globalCache.lastFetch.notes < CACHE_DURATION && globalCache.notes.length > 0) {
+    if (!force && now - globalCache.lastFetch.notes < CACHE.DURATION_MS && globalCache.notes.length > 0) {
       setLoadingNotes(false);
       return;
     }
@@ -155,7 +162,7 @@ export function useRealtimeData() {
         .order('date', { ascending: false });
 
       if (error) {
-        console.error('Error loading notes:', error);
+        logger.error('Error loading notes', error, 'RealtimeData');
         return;
       }
 
@@ -171,7 +178,7 @@ export function useRealtimeData() {
       globalCache.lastFetch.notes = now;
       notifyListeners();
     } catch (error) {
-      console.error('Error loading notes:', error);
+      logger.error('Error loading notes', error, 'RealtimeData');
     } finally {
       setLoadingNotes(false);
     }
@@ -180,7 +187,7 @@ export function useRealtimeData() {
   // Load reminders with caching
   const loadReminders = useCallback(async (force = false) => {
     const now = Date.now();
-    if (!force && now - globalCache.lastFetch.reminders < CACHE_DURATION && globalCache.reminders.length > 0) {
+    if (!force && now - globalCache.lastFetch.reminders < CACHE.DURATION_MS && globalCache.reminders.length > 0) {
       setLoadingReminders(false);
       return;
     }
@@ -192,7 +199,7 @@ export function useRealtimeData() {
         .order('date_time', { ascending: true });
 
       if (error) {
-        console.error('Error loading reminders:', error);
+        logger.error('Error loading reminders', error, 'RealtimeData');
         return;
       }
 
@@ -209,9 +216,76 @@ export function useRealtimeData() {
       globalCache.lastFetch.reminders = now;
       notifyListeners();
     } catch (error) {
-      console.error('Error loading reminders:', error);
+      logger.error('Error loading reminders', error, 'RealtimeData');
     } finally {
       setLoadingReminders(false);
+    }
+  }, [notifyListeners]);
+
+  // Load events with caching
+  const loadEvents = useCallback(async (force = false) => {
+    const now = Date.now();
+    if (!force && now - globalCache.lastFetch.events < CACHE.DURATION_MS && globalCache.events.length > 0) {
+      setLoadingEvents(false);
+      return;
+    }
+
+    try {
+      const { data, error } = await supabase
+        .from('events')
+        .select(`
+          id,
+          title,
+          description,
+          start_time,
+          end_time,
+          priority,
+          location,
+          all_day,
+          recurring,
+          recurrence_rule,
+          reminder_minutes,
+          project_id,
+          google_event_id,
+          google_calendar_id,
+          sync_status,
+          last_synced,
+          google_etag
+        `)
+        .order('start_time', { ascending: true });
+
+      if (error) {
+        logger.error('Error loading events', error, 'RealtimeData');
+        return;
+      }
+
+      const transformedEvents = (data ?? []).map((e) => ({
+        id: e.id,
+        title: e.title,
+        description: e.description || undefined,
+        start_time: e.start_time,
+        end_time: e.end_time,
+        priority: e.priority,
+        location: e.location || undefined,
+        all_day: e.all_day ?? false,
+        recurring: e.recurring ?? false,
+        recurrence_rule: e.recurrence_rule || undefined,
+        reminder_minutes: e.reminder_minutes || undefined,
+        project_id: e.project_id || undefined,
+        google_event_id: e.google_event_id || undefined,
+        google_calendar_id: e.google_calendar_id || undefined,
+        sync_status: e.sync_status || undefined,
+        last_synced: e.last_synced || undefined,
+        google_etag: e.google_etag || undefined,
+      }));
+
+      globalCache.events = transformedEvents;
+      globalCache.lastFetch.events = now;
+      notifyListeners();
+    } catch (error) {
+      logger.error('Error loading events', error, 'RealtimeData');
+    } finally {
+      setLoadingEvents(false);
     }
   }, [notifyListeners]);
 
@@ -222,6 +296,7 @@ export function useRealtimeData() {
     loadProjects();
     loadNotes();
     loadReminders();
+    loadEvents();
 
     // Set up real-time subscriptions only once
     if (!globalCache.subscriptions.tasks) {
@@ -232,8 +307,11 @@ export function useRealtimeData() {
           schema: 'public',
           table: 'tasks'
         }, (payload) => {
-          console.log('Task change detected:', payload);
-          loadTasks(true);
+          logger.debug('Task change detected', payload, 'RealtimeData');
+          // Small delay to ensure optimistic update is visible before reload
+          setTimeout(() => {
+            loadTasks(true);
+          }, 100);
         })
         .subscribe();
     }
@@ -277,17 +355,32 @@ export function useRealtimeData() {
         .subscribe();
     }
 
+    if (!globalCache.subscriptions.events) {
+      globalCache.subscriptions.events = supabase
+        .channel('global-events-changes')
+        .on('postgres_changes', {
+          event: '*',
+          schema: 'public',
+          table: 'events'
+        }, () => {
+          loadEvents(true);
+        })
+        .subscribe();
+    }
+
     // Cleanup function for when the app unmounts
     return () => {
       // Don't unsubscribe individual components, only when app unmounts
     };
-  }, [loadTasks, loadProjects, loadNotes, loadReminders]);
+  }, [loadTasks, loadProjects, loadNotes, loadReminders, loadEvents]);
 
   // Optimistic update functions
   const updateTaskOptimistic = useCallback((taskId: string, updates: Partial<Task>) => {
     const taskIndex = globalCache.tasks.findIndex(t => t.id === taskId);
     if (taskIndex >= 0) {
       globalCache.tasks[taskIndex] = { ...globalCache.tasks[taskIndex], ...updates };
+      // Force immediate update to all components
+      globalCache.tasks = [...globalCache.tasks];
       notifyListeners();
     }
   }, [notifyListeners]);
@@ -352,24 +445,50 @@ export function useRealtimeData() {
     notifyListeners();
   }, [notifyListeners]);
 
+  // Optimistic event functions
+  const updateEventOptimistic = useCallback((eventId: string, updates: Partial<Event>) => {
+    const eventIndex = globalCache.events.findIndex(e => e.id === eventId);
+    if (eventIndex >= 0) {
+      globalCache.events[eventIndex] = { ...globalCache.events[eventIndex], ...updates };
+      notifyListeners();
+    }
+  }, [notifyListeners]);
+
+  const addEventOptimistic = useCallback((event: Event) => {
+    globalCache.events.push(event);
+    // Sort by start time
+    globalCache.events.sort((a, b) => 
+      new Date(a.start_time).getTime() - new Date(b.start_time).getTime()
+    );
+    notifyListeners();
+  }, [notifyListeners]);
+
+  const removeEventOptimistic = useCallback((eventId: string) => {
+    globalCache.events = globalCache.events.filter(e => e.id !== eventId);
+    notifyListeners();
+  }, [notifyListeners]);
+
   return {
     // Data
     tasks,
     projects,
     notes,
     reminders,
+    events,
     
     // Loading states
     loadingTasks,
     loadingProjects,
     loadingNotes,
     loadingReminders,
+    loadingEvents,
     
     // Reload functions
     reloadTasks: () => loadTasks(true),
     reloadProjects: () => loadProjects(true),
     reloadNotes: () => loadNotes(true),
     reloadReminders: () => loadReminders(true),
+    reloadEvents: () => loadEvents(true),
     
     // Optimistic update functions
     updateTaskOptimistic,
@@ -382,7 +501,10 @@ export function useRealtimeData() {
     removeNoteOptimistic,
     updateReminderOptimistic,
     addReminderOptimistic,
-    removeReminderOptimistic
+    removeReminderOptimistic,
+    updateEventOptimistic,
+    addEventOptimistic,
+    removeEventOptimistic
   };
 }
 

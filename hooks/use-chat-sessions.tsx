@@ -2,6 +2,7 @@
 
 import { createContext, useContext, useEffect, useState, ReactNode } from 'react';
 import { ChatSession, ChatMessage } from '@/types';
+import { logger } from '@/lib/logger';
 
 interface ChatSessionsContextType {
   sessions: ChatSession[];
@@ -53,7 +54,7 @@ export function ChatSessionsProvider({ children }: { children: ReactNode }) {
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Unknown error');
-      console.error('Error loading sessions:', err);
+      logger.error('Error loading sessions', err, 'ChatSessions');
     } finally {
       setIsLoading(false);
     }
@@ -85,7 +86,7 @@ export function ChatSessionsProvider({ children }: { children: ReactNode }) {
       return newSession;
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Unknown error');
-      console.error('Error creating session:', err);
+      logger.error('Error creating session', err, 'ChatSessions');
       throw err;
     }
   };
@@ -104,7 +105,7 @@ export function ChatSessionsProvider({ children }: { children: ReactNode }) {
       setCurrentMessages(data.messages || []);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Unknown error');
-      console.error('Error selecting session:', err);
+      logger.error('Error selecting session', err, 'ChatSessions');
     }
   };
 
@@ -138,7 +139,7 @@ export function ChatSessionsProvider({ children }: { children: ReactNode }) {
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Unknown error');
-      console.error('Error updating session:', err);
+      logger.error('Error updating session', err, 'ChatSessions');
       throw err;
     }
   };
@@ -169,7 +170,7 @@ export function ChatSessionsProvider({ children }: { children: ReactNode }) {
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Unknown error');
-      console.error('Error deleting session:', err);
+      logger.error('Error deleting session', err, 'ChatSessions');
       throw err;
     }
   };
@@ -233,7 +234,7 @@ export function ChatSessionsProvider({ children }: { children: ReactNode }) {
       // Remove optimistic message on error
       setCurrentMessages(prev => prev.filter(m => m.id !== `temp-${Date.now()}`));
       setError(err instanceof Error ? err.message : 'Unknown error');
-      console.error('Error sending message:', err);
+      logger.error('Error sending message', err, 'ChatSessions');
       throw err;
     }
   };

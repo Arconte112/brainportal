@@ -10,7 +10,11 @@
       "Bash(npm install:*)",
       "Bash(mkdir:*)",
       "Bash(chmod:*)",
-      "Bash(node:*)"
+      "Bash(node:*)",
+      "Bash(rg:*)",
+      "Bash(find:*)",
+      "Bash(ls:*)",
+      "Bash(npm run lint)"
     ],
     "deny": []
   }

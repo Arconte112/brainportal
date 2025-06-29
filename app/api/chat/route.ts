@@ -4,18 +4,19 @@ import { createClient } from '@supabase/supabase-js';
 import { getTokenCount, getMessagesTokenCount, trimMessagesToTokenLimit } from '@/lib/token-utils';
 import { AVAILABLE_TOOLS, DEFAULT_AI_SETTINGS } from '@/lib/ai-config';
 import { ChatMessage, ToolCall, ToolResult } from '@/types';
-
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-);
-
-const openai = new OpenAI({
-  apiKey: process.env.OPENROUTER_API_KEY,
-  baseURL: 'https://openrouter.ai/api/v1',
-});
+import { logger } from '@/lib/logger';
 
 export async function POST(request: NextRequest) {
+  // Initialize clients inside the function to avoid build-time errors
+  const supabase = createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+  );
+
+  const openai = new OpenAI({
+    apiKey: process.env.OPENROUTER_API_KEY || '',
+    baseURL: 'https://openrouter.ai/api/v1',
+  });
   try {
     const { sessionId, message, settings } = await request.json();
 
@@ -158,7 +159,7 @@ export async function POST(request: NextRequest) {
     });
 
   } catch (error) {
-    console.error('Chat API error:', error);
+    logger.error('Chat API error', error, 'ChatAPI');
     return NextResponse.json(
       { error: 'Internal server error' },
       { status: 500 }
